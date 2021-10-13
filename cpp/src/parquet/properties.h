@@ -28,7 +28,7 @@
 #include "arrow/util/compression.h"
 #include "parquet/encryption/encryption.h"
 #include "parquet/exception.h"
-#include "parquet/parquet_version.h"
+#include "parquet/parquet_version.h.in"
 #include "parquet/platform.h"
 #include "parquet/schema.h"
 #include "parquet/type_fwd.h"
