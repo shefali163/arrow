@@ -28,7 +28,7 @@ namespace fs {
 
 AzureOptions::AzureOptions(std::string accountName, std::string accountKey,
                            std::string containerName, std::string scheme)
-    : storageCred(std::make_unique<Azure::Storage::StorageSharedKeyCredential>(
+    : storageCred(std::make_shared<Azure::Storage::StorageSharedKeyCredential>(
           accountName, accountKey)),
       containerName(std::move(containerName)),
       scheme(scheme) {}
@@ -36,13 +36,14 @@ AzureOptions::AzureOptions(std::string accountName, std::string accountKey,
 AzureOptions::AzureOptions() {}
 
 Result<AzureOptions> AzureOptions::FromUri(const std::string& uri_string,
-                                           const std::string accountKey) {
+                                           const std::string& accountKey) {
   Uri uri;
   RETURN_NOT_OK(uri.Parse(uri_string));
   return FromUri(uri, accountKey);
 }
 
-Result<AzureOptions> AzureOptions::FromUri(const Uri& uri, const std::string accountKey) {
+Result<AzureOptions> AzureOptions::FromUri(const Uri& uri,
+                                           const std::string& accountKey) {
   AzureOptions options;
   options.scheme = uri.scheme();
 
@@ -56,7 +57,7 @@ Result<AzureOptions> AzureOptions::FromUri(const Uri& uri, const std::string acc
   AZURE_ASSERT(host.find('.') != std::string::npos);
   std::string accountName = host.substr(splitPoint + 1, host.find('.') - splitPoint);
 
-  options.storageCred = std::make_unique<Azure::Storage::StorageSharedKeyCredential>(
+  options.storageCred = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(
       accountName, accountKey);
 
   return options;
@@ -81,9 +82,8 @@ std::shared_ptr<const KeyValueMetadata> GetBlobMetadata(
 
 class AzureBlobFile final : public io::RandomAccessFile {
  public:
-  AzureBlobFile(std::shared_ptr<Azure::Storage::Blobs::BlobClient> client,
-                const io::IOContext& io_context, const std::string& path,
-                int64_t size = kNoSize)
+  AzureBlobFile(Azure::Storage::Blobs::BlobClient client, const io::IOContext& io_context,
+                const std::string& path, int64_t size = kNoSize)
       : client_(std::move(client)),
         io_context_(io_context),
         path_(path),
@@ -97,7 +97,7 @@ class AzureBlobFile final : public io::RandomAccessFile {
       return Status::OK();
     }
 
-    auto properties = client_->GetProperties().Value;
+    auto properties = client_.GetProperties().Value;
 
     content_length_ = properties.BlobSize;
     DCHECK_GE(content_length_, 0);
@@ -135,7 +135,6 @@ class AzureBlobFile final : public io::RandomAccessFile {
   }
 
   Status Close() override {
-    client_ = nullptr;
     closed_ = true;
     return Status::OK();
   }
@@ -176,7 +175,7 @@ class AzureBlobFile final : public io::RandomAccessFile {
     range.Length = nbytes;
     downloadOptions.Range = Azure::Nullable<Azure::Core::Http::HttpRange>(range);
     auto result =
-        client_->DownloadTo(reinterpret_cast<uint8_t*>(out), nbytes, downloadOptions)
+        client_.DownloadTo(reinterpret_cast<uint8_t*>(out), nbytes, downloadOptions)
             .Value;
     AZURE_ASSERT(result.ContentRange.Length.HasValue());
     return result.ContentRange.Length.Value();
@@ -212,7 +211,7 @@ class AzureBlobFile final : public io::RandomAccessFile {
   }
 
  protected:
-  std::shared_ptr<Azure::Storage::Blobs::BlobClient> client_;
+  Azure::Storage::Blobs::BlobClient client_;
   const io::IOContext io_context_;
   std::string path_;
 
@@ -231,7 +230,7 @@ class AzureBlobFileSystem::Impl
   std::shared_ptr<Azure::Storage::Blobs::BlobContainerClient> client_;
 
   explicit Impl(AzureOptions options, io::IOContext io_context)
-      : options_(std::move(options)), io_context_(io_context) {}
+      : io_context_(io_context), options_(std::move(options)) {}
 
   Status Init() {
     client_ = std::make_shared<Azure::Storage::Blobs::BlobContainerClient>(
@@ -243,7 +242,8 @@ class AzureBlobFileSystem::Impl
 
   Result<std::shared_ptr<AzureBlobFile>> OpenInputFile(const std::string& s,
                                                        AzureBlobFileSystem* fs) {
-    auto ptr = std::make_shared<AzureBlobFile>(client_, fs->io_context(), s);
+    auto ptr =
+        std::make_shared<AzureBlobFile>(client_->GetBlobClient(s), fs->io_context(), s);
     RETURN_NOT_OK(ptr->Init());
     return ptr;
   }
@@ -262,7 +262,6 @@ AzureBlobFileSystem::~AzureBlobFileSystem() {}
 
 Result<std::shared_ptr<AzureBlobFileSystem>> AzureBlobFileSystem::Make(
     const AzureOptions& options, const io::IOContext& io_context) {
-  // TODO RETURN_NOT_OK(CheckInitialized());
   std::shared_ptr<AzureBlobFileSystem> ptr(new AzureBlobFileSystem(options, io_context));
   RETURN_NOT_OK(ptr->impl_->Init());
   return ptr;

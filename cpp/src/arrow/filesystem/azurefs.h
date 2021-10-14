@@ -10,6 +10,7 @@
 #include "arrow/util/visibility.h"
 
 namespace arrow {
+using internal::Uri;
 namespace fs {
 
 struct ARROW_EXPORT AzureOptions {
@@ -18,17 +19,16 @@ struct ARROW_EXPORT AzureOptions {
   AzureOptions();
 
   static Result<AzureOptions> FromUri(const std::string& uri_string,
-                                      const std::string accountKey);
-  static Result<AzureOptions> AzureOptions::FromUri(const Uri& uri,
-                                                    const std::string accountKey);
+                                      const std::string& accountKey);
+  static Result<AzureOptions> FromUri(const Uri& uri, const std::string& accountKey);
 
   std::string getContainerUrl() const;
   bool Equals(const AzureOptions& other) const;
 
+  std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
+
   std::string containerName;
   std::string scheme;
-
-  std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
 };
 
 class ARROW_EXPORT AzureBlobFileSystem : public FileSystem {
