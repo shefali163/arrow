@@ -22,10 +22,13 @@ struct ARROW_EXPORT AzureOptions {
   static Result<AzureOptions> AzureOptions::FromUri(const Uri& uri,
                                                     const std::string accountKey);
 
+  std::string getContainerUrl() const;
+  bool Equals(const AzureOptions& other) const;
+
   std::string containerName;
   std::string scheme;
 
-  std::unique_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
+  std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
 };
 
 class ARROW_EXPORT AzureBlobFileSystem : public FileSystem {

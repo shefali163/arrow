@@ -1,6 +1,7 @@
 #include "azurefs.h"
 
 #include <azure/storage/blobs.hpp>
+#include <memory>
 
 #include "arrow/buffer.h"
 #include "arrow/filesystem/filesystem.h"
@@ -59,6 +60,16 @@ Result<AzureOptions> AzureOptions::FromUri(const Uri& uri, const std::string acc
       accountName, accountKey);
 
   return options;
+}
+
+bool AzureOptions::Equals(const AzureOptions& other) const {
+  return containerName == other.containerName && scheme == other.scheme &&
+         storageCred == other.storageCred;
+}
+
+std::string AzureOptions::getContainerUrl() const {
+  return scheme + "://" + containerName + "@" + storageCred->AccountName +
+         ".dfs.core.windows.net";
 }
 
 std::shared_ptr<const KeyValueMetadata> GetBlobMetadata(
@@ -213,7 +224,8 @@ class AzureBlobFile final : public io::RandomAccessFile {
 
 // -----------------------------------------------------------------------
 // Azure filesystem implementation
-class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobFileSystem::Impl> {
+class AzureBlobFileSystem::Impl
+    : public std::enable_shared_from_this<AzureBlobFileSystem::Impl> {
  public:
   io::IOContext io_context_;
   std::shared_ptr<Azure::Storage::Blobs::BlobContainerClient> client_;
@@ -222,20 +234,26 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       : options_(std::move(options)), io_context_(io_context) {}
 
   Status Init() {
-    // TODO: Move to AzureOptions
-    std::string& blobContainerUrl;
-    std::shared_ptr<StorageSharedKeyCredential> credential;
-    BlobClientOptions& options;
-    return std::make_shared<Azure::Storage::Blobs::BlobContainerClient>(
-        blobContainerUrl, credential, options).Value(&client_);;
+    client_ = std::make_shared<Azure::Storage::Blobs::BlobContainerClient>(
+        options_.getContainerUrl(), options_.storageCred);
+    return Status::OK();
   }
 
   const AzureOptions& options() const { return options_; }
+
+  Result<std::shared_ptr<AzureBlobFile>> OpenInputFile(const std::string& s,
+                                                       AzureBlobFileSystem* fs) {
+    auto ptr = std::make_shared<AzureBlobFile>(client_, fs->io_context(), s);
+    RETURN_NOT_OK(ptr->Init());
+    return ptr;
+  }
+
  protected:
   AzureOptions options_;
 };
 
-AzureBlobFileSystem::AzureBlobFileSystem(const AzureOptions& options, const io::IOContext& io_context)
+AzureBlobFileSystem::AzureBlobFileSystem(const AzureOptions& options,
+                                         const io::IOContext& io_context)
     : FileSystem(io_context), impl_(std::make_shared<Impl>(options, io_context)) {
   default_async_is_sync_ = false;
 }
@@ -248,24 +266,6 @@ Result<std::shared_ptr<AzureBlobFileSystem>> AzureBlobFileSystem::Make(
   std::shared_ptr<AzureBlobFileSystem> ptr(new AzureBlobFileSystem(options, io_context));
   RETURN_NOT_OK(ptr->impl_->Init());
   return ptr;
-}
-
-Result<std::shared_ptr<ObjectInputFile>> OpenInputFile(const std::string& s,
-                                                       AzureBlobFileSystem* fs) {
-  //TODO RETURN_NOT_OK(ValidateFilePath(path));
-  std::shared_ptr<Azure::Storage::Blobs::BlobClient> blobClient = client_.GetBlobClient(s);
-  auto ptr = std::make_shared<AzureBlobFile>(blobClient, fs->io_context(), path);
-  RETURN_NOT_OK(ptr->Init());
-  return ptr;
-}
-
-Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
-    const std::string& s) {
-  return impl_->OpenInputFile(s, this);
-}
-
-bool AzureOptions::Equals(const AzureOptions& other) const {
-  return endpoint_override == other.endpoint_override && scheme == other.scheme;
 }
 
 bool AzureBlobFileSystem::Equals(const FileSystem& other) const {
@@ -327,7 +327,7 @@ Result<std::shared_ptr<io::InputStream>> AzureBlobFileSystem::OpenInputStream(
 
 Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
     const std::string& path) {
-  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+  return impl_->OpenInputFile(path, this);
 }
 
 Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
