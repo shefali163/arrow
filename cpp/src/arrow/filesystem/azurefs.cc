@@ -211,7 +211,139 @@ class AzureBlobFile final : public io::RandomAccessFile {
   std::shared_ptr<const KeyValueMetadata> metadata_;
 };
 
-class AzureBlobFileSystem::Impl
-    : public std::enable_shared_from_this<AzureBlobFileSystem::Impl> {};
+// -----------------------------------------------------------------------
+// Azure filesystem implementation
+class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobFileSystem::Impl> {
+ public:
+  io::IOContext io_context_;
+  std::shared_ptr<Azure::Storage::Blobs::BlobContainerClient> client_;
+
+  explicit Impl(AzureOptions options, io::IOContext io_context)
+      : options_(std::move(options)), io_context_(io_context) {}
+
+  Status Init() {
+    // TODO: Move to AzureOptions
+    std::string& blobContainerUrl;
+    std::shared_ptr<StorageSharedKeyCredential> credential;
+    BlobClientOptions& options;
+    return std::make_shared<Azure::Storage::Blobs::BlobContainerClient>(
+        blobContainerUrl, credential, options).Value(&client_);;
+  }
+
+  const AzureOptions& options() const { return options_; }
+ protected:
+  AzureOptions options_;
+};
+
+AzureBlobFileSystem::AzureBlobFileSystem(const AzureOptions& options, const io::IOContext& io_context)
+    : FileSystem(io_context), impl_(std::make_shared<Impl>(options, io_context)) {
+  default_async_is_sync_ = false;
+}
+
+AzureBlobFileSystem::~AzureBlobFileSystem() {}
+
+Result<std::shared_ptr<AzureBlobFileSystem>> AzureBlobFileSystem::Make(
+    const AzureOptions& options, const io::IOContext& io_context) {
+  // TODO RETURN_NOT_OK(CheckInitialized());
+  std::shared_ptr<AzureBlobFileSystem> ptr(new AzureBlobFileSystem(options, io_context));
+  RETURN_NOT_OK(ptr->impl_->Init());
+  return ptr;
+}
+
+Result<std::shared_ptr<ObjectInputFile>> OpenInputFile(const std::string& s,
+                                                       AzureBlobFileSystem* fs) {
+  //TODO RETURN_NOT_OK(ValidateFilePath(path));
+  std::shared_ptr<Azure::Storage::Blobs::BlobClient> blobClient = client_.GetBlobClient(s);
+  auto ptr = std::make_shared<AzureBlobFile>(blobClient, fs->io_context(), path);
+  RETURN_NOT_OK(ptr->Init());
+  return ptr;
+}
+
+Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
+    const std::string& s) {
+  return impl_->OpenInputFile(s, this);
+}
+
+bool AzureOptions::Equals(const AzureOptions& other) const {
+  return endpoint_override == other.endpoint_override && scheme == other.scheme;
+}
+
+bool AzureBlobFileSystem::Equals(const FileSystem& other) const {
+  if (this == &other) {
+    return true;
+  }
+  if (other.type_name() != type_name()) {
+    return false;
+  }
+  const auto& fs = ::arrow::internal::checked_cast<const AzureBlobFileSystem&>(other);
+  return impl_->options().Equals(fs.impl_->options());
+}
+
+Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& select) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::CreateDir(const std::string& path, bool recursive) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::DeleteDir(const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::DeleteDirContents(const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::DeleteRootDirContents() {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::DeleteFile(const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::Move(const std::string& src, const std::string& dest) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Status AzureBlobFileSystem::CopyFile(const std::string& src, const std::string& dest) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::InputStream>> AzureBlobFileSystem::OpenInputStream(
+    const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::InputStream>> AzureBlobFileSystem::OpenInputStream(
+    const FileInfo& info) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
+    const std::string& path) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::RandomAccessFile>> AzureBlobFileSystem::OpenInputFile(
+    const FileInfo& info) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenOutputStream(
+    const std::string& path, const std::shared_ptr<const KeyValueMetadata>& metadata) {
+  return Status::NotImplemented("The Azure FileSystem is not fully implemented");
+}
+
+Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenAppendStream(
+    const std::string&, const std::shared_ptr<const KeyValueMetadata>&) {
+  return Status::NotImplemented("Append is not supported in Azure");
+}
+
 }  // namespace fs
 }  // namespace arrow
