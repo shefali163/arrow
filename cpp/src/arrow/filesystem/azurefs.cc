@@ -46,16 +46,14 @@ Result<AzureOptions> AzureOptions::FromUri(const Uri& uri,
                                            const std::string& accountKey) {
   AzureOptions options;
   options.scheme = uri.scheme();
-
   AZURE_ASSERT(uri.has_host());
   auto host = uri.host();
+  AZURE_ASSERT(!uri.username().empty());
 
-  auto splitPoint = host.find('@');
-  AZURE_ASSERT(splitPoint != std::string::npos);
-  options.containerName = host.substr(0, splitPoint);
+  options.containerName = uri.username();
 
   AZURE_ASSERT(host.find('.') != std::string::npos);
-  std::string accountName = host.substr(splitPoint + 1, host.find('.') - splitPoint);
+  std::string accountName = host.substr(0, host.find('.'));
 
   options.storageCred = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(
       accountName, accountKey);
@@ -69,8 +67,8 @@ bool AzureOptions::Equals(const AzureOptions& other) const {
 }
 
 std::string AzureOptions::getContainerUrl() const {
-  return scheme + "://" + containerName + "@" + storageCred->AccountName +
-         ".dfs.core.windows.net";
+  return "https://" + storageCred->AccountName + ".blob.core.windows.net/" +
+         containerName;
 }
 
 std::shared_ptr<const KeyValueMetadata> GetBlobMetadata(
@@ -84,10 +82,7 @@ class AzureBlobFile final : public io::RandomAccessFile {
  public:
   AzureBlobFile(Azure::Storage::Blobs::BlobClient client, const io::IOContext& io_context,
                 const std::string& path, int64_t size = kNoSize)
-      : client_(std::move(client)),
-        io_context_(io_context),
-        path_(path),
-        content_length_(size) {}
+      : client_(client), io_context_(io_context), path_(path), content_length_(size) {}
 
   Status Init() {
     // Issue a HEAD Object to get the content-length and ensure any
@@ -242,8 +237,9 @@ class AzureBlobFileSystem::Impl
 
   Result<std::shared_ptr<AzureBlobFile>> OpenInputFile(const std::string& s,
                                                        AzureBlobFileSystem* fs) {
-    auto ptr =
-        std::make_shared<AzureBlobFile>(client_->GetBlobClient(s), fs->io_context(), s);
+    Azure::Core::Url url(s);
+    auto ptr = std::make_shared<AzureBlobFile>(client_->GetBlobClient(url.GetPath()),
+                                               fs->io_context(), s);
     RETURN_NOT_OK(ptr->Init());
     return ptr;
   }
@@ -276,6 +272,10 @@ bool AzureBlobFileSystem::Equals(const FileSystem& other) const {
   }
   const auto& fs = ::arrow::internal::checked_cast<const AzureBlobFileSystem&>(other);
   return impl_->options().Equals(fs.impl_->options());
+}
+
+FileInfoGenerator AzureBlobFileSystem::GetFileInfoGenerator(const FileSelector& select) {
+  throw std::runtime_error("The Azure FileSystem is not fully implemented");
 }
 
 Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& path) {
