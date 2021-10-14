@@ -4031,6 +4031,20 @@ if(ARROW_S3)
   endif()
 endif()
 
+if(ARROW_AZURE)
+  include_directories(SYSTEM $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/include)
+
+  set(azure-core-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-core-cpp)
+  set(azure-storage-blobs-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-storage-blobs-cpp)
+  set(azure-storage-common-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-storage-common-cpp)
+  
+  find_package(azure-core-cpp CONFIG REQUIRED)
+  find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+  find_package(azure-storage-common-cpp CONFIG REQUIRED)
+  
+  set(AZURE_SDK_LINK_LIBRARIES Azure::azure-core Azure::azure-storage-common Azure::azure-storage-blobs)
+endif()
+
 message(STATUS "All bundled static libraries: ${ARROW_BUNDLED_STATIC_LIBS}")
 
 # Write out the package configurations.
