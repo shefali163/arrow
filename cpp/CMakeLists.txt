@@ -772,6 +772,11 @@ if(ARROW_WITH_OPENTELEMETRY)
        opentelemetry-cpp::otlp_http_exporter)
 endif()
 
+if (ARROW_AZURE)
+  list(APPEND ARROW_LINK_LIBS ${AZURE_SDK_LINK_LIBRARIES})
+  list(APPEND ARROW_STATIC_LINK_LIBS ${AZURE_SDK_LINK_LIBRARIES})
+endif()
+
 if(ARROW_WITH_UTF8PROC)
   list(APPEND ARROW_LINK_LIBS utf8proc::utf8proc)
   list(APPEND ARROW_STATIC_LINK_LIBS utf8proc::utf8proc)
