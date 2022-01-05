@@ -474,6 +474,13 @@ if(ARROW_FILESYSTEM)
                                            SKIP_UNITY_BUILD_INCLUSION ON)
   endif()
 
+  if(ARROW_AZURE)
+    list(APPEND ARROW_SRCS filesystem/azure.cc)
+    set_source_files_properties(filesystem/azure.cc
+                                PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+                                           SKIP_UNITY_BUILD_INCLUSION ON)
+  endif()
+
   list(APPEND ARROW_TESTING_SRCS filesystem/test_util.cc)
 endif()
 

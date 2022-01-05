@@ -17,6 +17,8 @@
 
 #include "arrow/filesystem/azure.h"
 
+#include <azure/storage/blobs.hpp>
+#include <azure/storage/files/datalake.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -62,6 +64,9 @@
 
 static const char kSep = '/';
 
+namespace arrow {
+namespace fs {
+
 struct AzurePath {
   std::string full_path;
   std::string container;
@@ -83,7 +88,7 @@ struct AzurePath {
       return Status::Invalid("Path cannot start with a separator ('", s, "')");
     }
     if (first_sep == std::string::npos) {
-      return S3Path{std::string(src), std::string(src), "", {}};
+      return AzurePath{std::string(src), std::string(src), "", {}};
     }
     AzurePath path;
     path.full_path = std::string(src);
@@ -121,9 +126,15 @@ struct AzurePath {
   }
 };
 
+std::shared_ptr<const KeyValueMetadata> GetBlobMetadata(const Azure::Response<Azure::Storage::Files::DataLake::Models::PathProperties>& result) {
+  // Dummy value for now
+  auto md = std::make_shared<KeyValueMetadata>();
+  return md;
+}
+
 class AzureBlobFile final : public io::RandomAccessFile {
  public:
-  AzureBlobFile(Azure::Storage::Blobs::DataLake::DataLakePathClient pathClient, Azure::Storage::Blobs::DataLake::DataLakeFileClient fileClient, const io::IOContext& io_context,
+  AzureBlobFile(Azure::Storage::Files::DataLake::DataLakePathClient pathClient, Azure::Storage::Files::DataLake::DataLakeFileClient fileClient, const io::IOContext& io_context,
                 const AzurePath& path, int64_t size = kNoSize)
       : pathClient_(pathClient), fileClient_(fileClient), io_context_(io_context), path_(path), content_length_(size) {}
 
@@ -137,7 +148,7 @@ class AzureBlobFile final : public io::RandomAccessFile {
 
     auto properties = pathClient_.GetProperties();
 
-    content_length_ = properties.FileSize;
+    content_length_ = properties.Value.FileSize;
     DCHECK_GE(content_length_, 0);
 
     metadata_ = GetBlobMetadata(properties);
@@ -249,8 +260,8 @@ class AzureBlobFile final : public io::RandomAccessFile {
   }
 
  protected:
-  Azure::Storage::Blobs::DataLake::DataLakePathClient pathClient_;
-  Azure::Storage::Blobs::DataLake::DataLakeFileClient fileClient_;
+  Azure::Storage::Files::DataLake::DataLakePathClient pathClient_;
+  Azure::Storage::Files::DataLake::DataLakeFileClient fileClient_;
   const io::IOContext io_context_;
   AzurePath path_;
 
@@ -280,24 +291,24 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
   Status Init() {
     gen1Client_ = std::make_shared<Azure::Storage::Blobs::BlobServiceClient>(options_.getServiceUrlForGen1(), options_.storageCred);
-    gen2Client_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakeServiceClient>(options_.getServiceUrlForGen2(), options_.storageCred);
+    gen2Client_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakeServiceClient>(options_.getServiceUrlForGen2(), options_.storageCred);
     return Status::OK();
   }
 
   const AzureOptions& options() const { return options_; }
 
   Status CreateContainer(const std::string& container) {
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     fileSystemClient.CreateIfNotExists();
     return Status::OK();
   }  
 
-  bool ContainerExists(const std::string& container) {
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+  Result<bool> ContainerExists(const std::string& container) {
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     try {
       auto properties = fileSystemClient.GetProperties();
       return true;
-    } catch {
+    } catch (int e){
       return false;
     }
     // auto filesystems = gen2Client_.ListFileSystems();
@@ -309,12 +320,12 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     // return false;
   }
 
-  bool FileExists(const std::string& s) {
-    auto pathClient_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakePathClient>(s, options_.storageCred);
+  Result<bool> FileExists(const std::string& s) {
+    auto pathClient_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakePathClient>(s, options_.storageCred);
     try {
-      auto properties = pathClient_.GetProperties();
+      auto properties = pathClient_->GetProperties();
       return true;
-    } catch {
+    } catch (int e) {
       return false;
     }
     // auto filesystems = gen2Client_.ListFileSystems();
@@ -326,8 +337,8 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     // return false;
   }
 
-  Status CreateEmptyDir(const std::string& container, const std::vector<std::string>& path) {
-    auto directoryClient = gen2Client_.GetFileSystemClient(container).GetDirectoryClient(path.front());
+  Status CreateEmptyDir(const std::string& container, std::vector<std::string>& path) {
+    auto directoryClient = gen2Client_->GetFileSystemClient(container).GetDirectoryClient(path.front());
     std::vector<std::string>::iterator it = path.begin();
     std::advance(it, 1);
     while (it != path.end()) {
@@ -339,14 +350,15 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   }
 
   Status IsNonEmptyDirectory(const AzurePath& path, bool* out) {
-    if (!ContainerExists(path.container)) {
+    ARROW_ASSIGN_OR_RAISE(bool exists, ContainerExists(path.container));
+    if (exists) {
       *out = false;
       return Status::OK();
     }
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(path.container);
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(path.container);
 
     int count = 0;
-    for (auto file_path : fileSystemClient.ListPaths().Paths) {
+    for (auto file_path : fileSystemClient.ListPaths(true).Paths) {
       if (file_path.Name.rfind(path.path_to_file, 0) == 0) {
         count++;
       }
@@ -364,14 +376,15 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   }
 
   Status IsEmptyDirectory(const AzurePath& path, bool* out) {
-    if (!ContainerExists(path.container)) {
+    ARROW_ASSIGN_OR_RAISE(bool exists, ContainerExists(path.container));
+    if (exists) {
       *out = false;
       return Status::OK();
     }
 
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(path.container);
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(path.container);
     int count = 0;
-    for (auto file_path : fileSystemClient.ListPaths().Paths) {
+    for (auto file_path : fileSystemClient.ListPaths(true).Paths) {
       if (file_path.Name == path.path_to_file) {
         count++;
       }
@@ -389,13 +402,13 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   }
 
   Status DeleteContainer(const std::string& container) {
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     fileSystemClient.DeleteIfExists();
     return Status::OK();
   }
 
-  Status DeleteDir(const std::string& container, const std::string& path) {
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+  Status DeleteDir(const std::string& container, std::vector<std::string>& path) {
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     auto directoryClient = fileSystemClient.GetDirectoryClient(path.front());
     std::vector<std::string>::iterator it = path.begin();
     std::advance(it, 1);
@@ -407,14 +420,14 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     return Status::OK();
   }
 
-  Status DeleteFile(const std::string& container, const std::string& path) {
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+  Status DeleteFile(const std::string& container, std::vector<std::string>& path) {
+    auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     if (path.size() == 1) {
       auto fileClient = fileSystemClient.GetFileClient(path.front());
       fileClient.DeleteIfExists();
       return Status::OK();
     }
-    std::string file_name = path.end();
+    std::string file_name = path.back();
     path.pop_back();
     auto directoryClient = fileSystemClient.GetDirectoryClient(path.front());
     std::vector<std::string>::iterator it = path.begin();
@@ -430,19 +443,19 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
   Status CopyFile(const AzurePath& src, const AzurePath& dest) {
     //TODO
-    auto fileSystemClient = gen2Client_.GetFileSystemClient(container);
+    // auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
   }
 
   Result<std::shared_ptr<AzureBlobFile>> OpenInputFile(const std::string& s, AzureBlobFileSystem* fs) {
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
-    auto pathClient_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakePathClient>(s, options_.storageCred);
-    auto fileClient_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakeFileClient>(s, options_.storageCred);
-    auto ptr = std::make_shared<AzureBlobFile>(pathClient_, fileClient_, fs->io_context(), path);
+    auto pathClient_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakePathClient>(s, options_.storageCred);
+    auto fileClient_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakeFileClient>(s, options_.storageCred);
+    auto ptr = std::make_shared<AzureBlobFile>(*pathClient_, *fileClient_, fs->io_context(), path);
     RETURN_NOT_OK(ptr->Init());
     return ptr;
   }
 
-  Result<std::shared_ptr<ObjectInputFile>> OpenInputFile(const FileInfo& info,
+  Result<std::shared_ptr<AzureBlobFile>> OpenInputFile(const FileInfo& info,
                                                          AzureBlobFileSystem* fs) {
     if (info.type() == FileType::NotFound) {
       return ::arrow::fs::internal::PathNotFound(info.path());
@@ -453,9 +466,9 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(info.path()));
 
-    pathClient_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakePathClient>(info.path(), options_.storageCred);
-    fileClient_ = std::make_shared<Azure::Storage::Blobs::DataLake::DataLakeFileClient>(info.path(), options_.storageCred);
-    auto ptr = std::make_shared<AzureBlobFile>(pathClient_, fileClient_, fs->io_context(), path, info.size());
+    auto pathClient_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakePathClient>(info.path(), options_.storageCred);
+    auto fileClient_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakeFileClient>(info.path(), options_.storageCred);
+    auto ptr = std::make_shared<AzureBlobFile>(*pathClient_, *fileClient_, fs->io_context(), path, info.size());
     RETURN_NOT_OK(ptr->Init());
     return ptr;
   }
@@ -513,8 +526,10 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
     ARROW_ASSIGN_OR_RAISE(bool file_exists, impl_->FileExists(s));
     if (file_exists) {
       // "File" object found
-      ARROW_ASSIGN_OR_RAISE(auto properties, impl_->GetFileProperties(path.container));
-      FileObjectToInfo(properties, &info);
+      //TODO{
+      // ARROW_ASSIGN_OR_RAISE(auto properties, impl_->GetFileProperties(path.container));
+      // FileObjectToInfo(properties, &info);
+      //}
       return info;
     }
     // Not found => perhaps it's an empty "directory"
@@ -577,7 +592,7 @@ Status AzureBlobFileSystem::CreateDir(const std::string& s, bool recursive) {
 
     // XXX Should we check that no non-directory entry exists?
     // Minio does it for us, not sure about other S3 implementations.
-    return impl_->CreateEmptyDir(path.container, path.path_to_file);
+    return impl_->CreateEmptyDir(path.container, path.path_to_file_parts);
   }
 }
 
@@ -590,7 +605,7 @@ Status AzureBlobFileSystem::DeleteDir(const std::string& s) {
   if (path.path_to_file.empty()) {
     return impl_->DeleteContainer(path.container);
   }
-  RETURN_NOT_OK(impl_->DeleteDir(path.container, path.path_to_file));
+  RETURN_NOT_OK(impl_->DeleteDir(path.container, path.path_to_file_parts));
 }
 
 Status AzureBlobFileSystem::DeleteDirContents(const std::string& s) {
@@ -603,10 +618,10 @@ Status AzureBlobFileSystem::DeleteRootDirContents() {
   return Status::NotImplemented("Cannot delete all Azure Containers");
 }
 
-Status AzureBlobFileSystem::DeleteFile(const std::string& path) {
+Status AzureBlobFileSystem::DeleteFile(const std::string& s) {
   ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
 
-  RETURN_NOT_OK(impl_->DeleteFile(path.container, path.path_to_file));
+  RETURN_NOT_OK(impl_->DeleteFile(path.container, path.path_to_file_parts));
 }
 
 Status AzureBlobFileSystem::Move(const std::string& src, const std::string& dest) {
@@ -615,9 +630,9 @@ Status AzureBlobFileSystem::Move(const std::string& src, const std::string& dest
 
 Status AzureBlobFileSystem::CopyFile(const std::string& src, const std::string& dest) {
   ARROW_ASSIGN_OR_RAISE(auto src_path, AzurePath::FromString(src));
-  RETURN_NOT_OK(ValidateFilePath(src_path));
+  // RETURN_NOT_OK(ValidateFilePath(src_path));
   ARROW_ASSIGN_OR_RAISE(auto dest_path, AzurePath::FromString(dest));
-  RETURN_NOT_OK(ValidateFilePath(dest_path));
+  // RETURN_NOT_OK(ValidateFilePath(dest_path));
 
   if (src_path == dest_path) {
     return Status::OK();
@@ -653,4 +668,6 @@ Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenOutputStream(
 Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenAppendStream(
     const std::string&, const std::shared_ptr<const KeyValueMetadata>&) {
   return Status::NotImplemented("Append is not supported in Azure");
+}
+}
 }

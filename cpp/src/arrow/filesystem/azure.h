@@ -36,6 +36,8 @@ struct ARROW_EXPORT AzureOptions{
     std::string getServiceUrlForGen1() const;
     std::string getServiceUrlForGen2() const;
 
+    bool Equals(const AzureOptions& other) const;
+
     std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
     std::string scheme;
     std::string account_name;

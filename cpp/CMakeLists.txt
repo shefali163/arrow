@@ -47,6 +47,9 @@ if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(ARROW_VERSION "7.0.0-SNAPSHOT")
 
 string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" ARROW_BASE_VERSION "${ARROW_VERSION}")
@@ -770,6 +773,11 @@ if(ARROW_WITH_OPENTELEMETRY)
        opentelemetry-cpp::otlp_http_exporter)
   list(APPEND ARROW_STATIC_LINK_LIBS opentelemetry-cpp::trace
        opentelemetry-cpp::otlp_http_exporter)
+endif()
+
+if (ARROW_AZURE)
+  list(APPEND ARROW_LINK_LIBS ${AZURE_SDK_LINK_LIBRARIES})
+  list(APPEND ARROW_STATIC_LINK_LIBS ${AZURE_SDK_LINK_LIBRARIES})
 endif()
 
 if(ARROW_WITH_UTF8PROC)
