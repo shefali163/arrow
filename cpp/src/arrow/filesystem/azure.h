@@ -17,31 +17,79 @@
 
 #pragma once
 
-#include <azure/storage/common/storage_credential.hpp>
 #include <memory>
 #include <string>
+#include <vector>
+#include <azure/storage/common/storage_credential.hpp>
+#include <azure/core/credentials/credentials.hpp>
 
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/uri.h"
-#include "arrow/util/visibility.h"
 
 namespace arrow {
-using internal::Uri;
 namespace fs {
 
+enum class AzureCredentialsKind : int8_t {
+  /// Anonymous access (no credentials used), public
+  Anonymous,
+  /// Use explicitly-provided access key pair
+  StorageCredentials,
+  /// 
+  ServicePrincipleCredentials,
+  /// Use Sas Token to authenticate
+  Sas,
+  /// Use Connection String
+  ConnectionString
+};
+
+/// Options for the AzureFileSystem implementation.
 struct ARROW_EXPORT AzureOptions{
-    AzureOptions();
+  std::string scheme;
+  std::string account_url;
+  AzureCredentialsKind credentials_kind = AzureCredentialsKind::Anonymous;
 
-    std::string getServiceUrlForGen1() const;
-    std::string getServiceUrlForGen2() const;
+  std::string sas_token;
+  std::string connection_string;
+  std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storage_credentials_provider;
+  std::shared_ptr<Azure::Core::Credentials::TokenCredential> service_principle_credentials_provider;
 
-    bool Equals(const AzureOptions& other) const;
+  AzureOptions();
 
-    std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> storageCred;
-    std::string scheme;
-    std::string account_name;
-    std::string account_key;
+  void ConfigureAnonymousCredentials(const std::string& account_name);
+
+  void ConfigureAccountKeyCredentials(const std::string& account_name, 
+                                      const std::string& account_key);
+
+  void ConfigureConnectionStringCredentials(const std::string& connection_string);
+
+  void ConfigureServicePrincipleCredentials(const std::string& account_name,
+                                 const std::string& tenant_id,
+                                 const std::string& client_id,
+                                 const std::string& client_secret);
+
+  void ConfigureSasCredentials(const std::string& sas_token);
+
+  bool Equals(const AzureOptions& other) const;
+
+  static AzureOptions FromAnonymous(const std::string account_name);
+
+  static AzureOptions FromAccountKey(const std::string& account_name,
+                                     const std::string& account_key);
+
+  static AzureOptions FromConnectionString(const std::string& connection_string);
+
+  static AzureOptions FromServicePrincipleCredential(const std::string& account_name,
+                                          const std::string& tenant_id,
+                                          const std::string& client_id,
+                                          const std::string& client_secret);
+                                        
+  static AzureOptions FromSas(const std::string& uri);
+
+  static Result<AzureOptions> FromUri(const ::arrow::internal::Uri& uri,
+                                   std::string* out_path = NULLPTR);
+  static Result<AzureOptions> FromUri(const std::string& uri,
+                                   std::string* out_path = NULLPTR);
 };
 
 class ARROW_EXPORT AzureBlobFileSystem : public FileSystem {
@@ -52,8 +100,6 @@ class ARROW_EXPORT AzureBlobFileSystem : public FileSystem {
 
   /// Return the original Azure options when constructing the filesystem
   AzureOptions options() const;
-  /// Return the actual region this filesystem connects to
-  std::string region() const;
 
   bool Equals(const FileSystem& other) const override;
 
@@ -63,7 +109,7 @@ class ARROW_EXPORT AzureBlobFileSystem : public FileSystem {
   Result<FileInfo> GetFileInfo(const std::string& path) override;
   Result<std::vector<FileInfo>> GetFileInfo(const FileSelector& select) override;
 
-  FileInfoGenerator GetFileInfoGenerator(const FileSelector& select) override;
+  /// FileInfoGenerator GetFileInfoGenerator(const FileSelector& select) override;
 
   Status CreateDir(const std::string& path, bool recursive = true) override;
 
