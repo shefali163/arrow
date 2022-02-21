@@ -165,16 +165,6 @@ Result<AzureOptions> AzureOptions::FromUri(const std::string& uri_string,
 Result<AzureOptions> AzureOptions::FromUri(const Uri& uri,
                                            std::string* out_path) {
   AzureOptions options;
-  std::cout<<"scheme: "<<uri.scheme()<<"\n";
-  std::cout<<"host: "<<uri.host()<<"\n";
-  std::cout<<"username: "<<uri.username()<<"\n";
-  std::cout<<"path: "<<uri.path()<<"\n";
-  std::cout<<"query_string: "<<uri.query_string()<<"\n";
-  auto ch = uri.query_items().ValueOrDie();
-  for(auto s:ch){
-    std::cout<<"query_items: "<<s.first<<": "<<s.second<<"\n";
-  }
-
   AZURE_ASSERT(uri.has_host());
   const auto container = uri.host();
   auto path = uri.path();
@@ -263,7 +253,11 @@ struct AzurePath {
     auto parent = AzurePath{"", container, "", path_to_file_parts};
     parent.path_to_file_parts.pop_back();
     parent.path_to_file = internal::JoinAbstractPath(parent.path_to_file_parts);
-    parent.full_path = parent.container + kSep + parent.path_to_file;
+    if (parent.path_to_file.empty()) {
+      parent.full_path = parent.container;
+    } else {
+      parent.full_path = parent.container + kSep + parent.path_to_file;
+    }
     return parent;
   }
 
@@ -291,17 +285,22 @@ std::shared_ptr<const KeyValueMetadata> GetObjectMetadata(const ObjectResult& re
 }
 
 template <typename T>
-Status InitServiceClient(std::shared_ptr<T>& client, const AzureOptions options) {
+Status InitServiceClient(std::shared_ptr<T>& client, const AzureOptions options, bool gen1_client) {
+  std::string url = options.account_url;
+  if (gen1_client) {
+    auto sep = url.find("dfs.core.windows.net");
+    url = url.substr(0, sep) + "blob" + url.substr(sep + 3, url.size());
+  }
   if (options.credentials_kind == AzureCredentialsKind::StorageCredentials) {
-    client = std::make_shared<T>(options.account_url, options.storage_credentials_provider);
+    client = std::make_shared<T>(url, options.storage_credentials_provider);
   } else if(options.credentials_kind == AzureCredentialsKind::ServicePrincipleCredentials) {
-    client = std::make_shared<T>(options.account_url, options.service_principle_credentials_provider);
+    client = std::make_shared<T>(url, options.service_principle_credentials_provider);
   } else if (options.credentials_kind == AzureCredentialsKind::ConnectionString) {
     client = std::make_shared<T>(T::CreateFromConnectionString(options.connection_string));
   } else if (options.credentials_kind == AzureCredentialsKind::Sas){
-    client = std::make_shared<T>(options.account_url + options.sas_token);
+    client = std::make_shared<T>(url + options.sas_token);
   } else {
-    client = std::make_shared<T>(options.account_url);
+    client = std::make_shared<T>(url);
   }
   return Status::OK();
 }
@@ -346,7 +345,7 @@ class ObjectInputFile final : public io::RandomAccessFile {
       DCHECK_GE(content_length_, 0);
       metadata_ = GetObjectMetadata(properties.Value.Metadata);
       return Status::OK();
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       return Status::IOError("Invalid file path given");
     }
   }
@@ -475,7 +474,7 @@ class ObjectOutputStream final : public io::OutputStream {
                      const io::IOContext& io_context, const AzurePath& path, 
                      const std::shared_ptr<const KeyValueMetadata>& metadata)
       : pathClient_(std::move(pathClient)),
-        fileClient_(std::move(fileClient)), 
+        fileClient_(std::move(fileClient)),
         io_context_(io_context), 
         path_(path),
         metadata_(metadata){}
@@ -499,10 +498,12 @@ class ObjectOutputStream final : public io::OutputStream {
       }
       content_length_ = properties.Value.FileSize;
       DCHECK_GE(content_length_, 0);
-      return Status::OK();
-    } catch(std::exception e) {
-      return Status::IOError("Invalid file path given");
+    } catch(std::exception const& e) {
+      //new file
+      fileClient_->CreateIfNotExists();
+      content_length_ = 0;
     }
+    return Status::OK();
   }
 
   Status Abort() override {
@@ -605,7 +606,7 @@ class ObjectAppendStream final : public io::OutputStream {
       content_length_ = properties.Value.FileSize;
       DCHECK_GE(content_length_, 0);
       return Status::OK();
-    } catch(std::exception e) {
+    } catch(std::exception const& e) {
       return Status::IOError("Invalid file path given");
     }
   }
@@ -713,8 +714,8 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       : io_context_(io_context), options_(std::move(options)) {}
 
   Status Init() {
-    InitServiceClient(gen1Client_, options_);
-    InitServiceClient(gen2Client_, options_);
+    InitServiceClient(gen1Client_, options_, true);
+    InitServiceClient(gen2Client_, options_, false);
     url = options_.account_url;
     return Status::OK();
   }
@@ -734,7 +735,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     try {
       auto properties = fileSystemClient.GetProperties();
       return true;
-    } catch (std::exception e){
+    } catch (std::exception const& e){
       return false;
     }
   }
@@ -752,13 +753,13 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     try {
       auto properties = pathClient_->GetProperties();
       return properties.Value.IsDirectory;
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       return false;
     }
   }
 
   Result<bool> FileExists(const std::string& s) {
-    std::string uri;
+    std::string uri = s;
     if (options_.credentials_kind == AzureCredentialsKind::Sas) {
       auto src = internal::RemoveTrailingSlash(s);
       auto first_sep = src.find_first_of("?");
@@ -770,7 +771,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     try {
       auto properties = pathClient_->GetProperties();
       return !properties.Value.IsDirectory;
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       return false;
     }
   }
@@ -801,7 +802,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
           *out = true;  
         }
       }
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       *out = false;
     }
     return Status::OK();
@@ -821,7 +822,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
           *out = true;  
         }
       }
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       *out = false;
     }
     return Status::OK();
@@ -894,11 +895,13 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     if (src_path == dest_path) {
       return Status::OK();
     }
-    // std::string url = gen2Client_->GetUrl();
-    // std::cout<<url + src<<"\n";
     if (FileExists(url + src).ValueOrDie()) {
       auto fileSystemClient = gen2Client_->GetFileSystemClient(src_path.container);
       auto path = src_path.path_to_file_parts;
+      if (path.size() == 1) {
+        fileSystemClient.RenameFile(path.front(), dest_path.path_to_file);
+        return Status::OK();
+      }
       auto directoryClient = fileSystemClient.GetDirectoryClient(path.front());
       std::vector<std::string>::const_iterator it = path.begin();
       std::advance(it, 1);
@@ -934,12 +937,32 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     ARROW_ASSIGN_OR_RAISE(auto src_path, AzurePath::FromString(src));
     ARROW_ASSIGN_OR_RAISE(auto dest_path, AzurePath::FromString(dest));
 
+    if (!(FileExists(url + src)).ValueOrDie()) {
+      return Status::IOError("Cannot copy file, file doesn't exist at src");
+    }
+    if (dest_path.has_parent()) {
+      AzurePath parent_path = dest_path.parent();
+      if (parent_path.path_to_file.empty()) {
+        if (!ContainerExists(parent_path.container).ValueOrDie()) {
+          return Status::IOError("Cannot copy file '", src_path.full_path,
+                               "': parent directory of destination does not exist");
+        }
+      } else {
+        auto exists = DirExists(url + parent_path.full_path);
+        if (!(exists.ValueOrDie())) {
+          return Status::IOError("Cannot copy file '", src_path.full_path,
+                               "': parent directory of destination does not exist");
+        }
+      }
+    }
     if (src_path == dest_path) {
       return Status::OK();
     }
     auto containerClient = gen1Client_->GetBlobContainerClient(dest_path.container);
     auto fileClient = containerClient.GetBlobClient(dest_path.path_to_file);
-    auto response = fileClient.StartCopyFromUri(url + src);
+    auto sep = url.find("dfs.core.windows.net");
+    auto gen1_url = url.substr(0, sep) + "blob" + url.substr(sep + 3, url.size());
+    auto response = fileClient.StartCopyFromUri(gen1_url + src);
     if (response.Value().CopyStatus.HasValue() && (response.Value().CopyStatus.Value() != Azure::Storage::Blobs::Models::CopyStatus::Success)) {
       return Status::IOError("Error in copying");
     }
@@ -962,7 +985,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
             childrenFiles->push_back(container+"/"+p.Name);
           }
         }
-      } catch (std::exception e) {
+      } catch (std::exception const& e) {
         if (!allow_not_found) {
           return Status::IOError("Path does not exists");
         }
@@ -985,7 +1008,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
           childrenFiles->push_back(container+"/"+p.Name);
         }
       }
-    } catch (std::exception e) {
+    } catch (std::exception const& e) {
       if (!allow_not_found) {
         return Status::IOError("Path does not exists");
       }
@@ -1008,7 +1031,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       FileInfo info;
       // std::string url = gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      GetFileProperties(url+childFile, &properties);
+      GetProperties(url+childFile, &properties);
       PathInfoToFileInfo(childFile, FileType::File, properties.FileSize, properties.LastModified, &info);
       out->push_back(std::move(info));
     }
@@ -1016,7 +1039,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       FileInfo info;
       // std::string url = gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      GetFileProperties(url+childDir, &properties);
+      GetProperties(url+childDir, &properties);
       PathInfoToFileInfo(childDir, FileType::Directory, -1, properties.LastModified, &info);
       out->push_back(std::move(info));
       if (select.recursive && nesting_depth < select.max_recursion) {
@@ -1029,13 +1052,24 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     return Status::OK();
   }
 
-  Status GetFileProperties(const std::string& s, Azure::Storage::Files::DataLake::Models::PathProperties* properties) {
+  Status GetProperties(const std::string& s, Azure::Storage::Files::DataLake::Models::PathProperties* properties) {
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
     InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, s, path.container, path.path_to_file);
+    if (path.path_to_file.empty()) {
+      auto fileSystemClient = gen2Client_->GetFileSystemClient(path.container);
+      auto props = fileSystemClient.GetProperties().Value;
+      properties->LastModified = props.LastModified;
+      properties->Metadata = props.Metadata;
+      properties->ETag = props.ETag;
+      properties->FileSize = -1;
+      return Status::OK();
+    }
     auto props = pathClient_->GetProperties().Value;
     properties->FileSize = props.FileSize;
     properties->LastModified = props.LastModified;
+    properties->Metadata = props.Metadata;
+    properties->ETag = props.ETag;
     return Status::OK();
   }
 
@@ -1071,6 +1105,21 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeFileClient> fileClient_;
     InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, url+s, path.container, path.path_to_file);
 
+    if (path.has_parent()) {
+      AzurePath parent_path = path.parent();
+      if (parent_path.path_to_file.empty()) {
+        if (!ContainerExists(parent_path.container).ValueOrDie()) {
+          return Status::IOError("Cannot write to file '", path.full_path,
+                               "': parent directory does not exist");
+        }
+      } else {
+        auto exists = DirExists(url + parent_path.full_path);
+        if (!(exists.ValueOrDie())) {
+          return Status::IOError("Cannot write to file '", path.full_path,
+                               "': parent directory does not exist");
+        }
+      }
+    }
     auto ptr = std::make_shared<ObjectOutputStream>(pathClient_, fileClient_, fs->io_context(), path, metadata);
     RETURN_NOT_OK(ptr->Init());
     return ptr;
@@ -1167,7 +1216,7 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
     if (file_exists) {
       // "File" object found
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetFileProperties(impl_->url + s, &properties);
+      impl_->GetProperties(impl_->url + s, &properties);
       FileObjectToInfo(properties, &info);
       return info;
     }
@@ -1194,7 +1243,7 @@ Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& sele
       FileInfo info;
       // std::string url = impl_->gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetFileProperties(impl_->url + container, &properties);
+      impl_->GetProperties(impl_->url + container, &properties);
       PathInfoToFileInfo(container, FileType::Directory, -1, properties.LastModified, &info);
       results.push_back(std::move(info));
       if (select.recursive) {
