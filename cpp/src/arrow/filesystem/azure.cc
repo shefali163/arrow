@@ -80,20 +80,23 @@ static const char kSep = '/';
 AzureOptions::AzureOptions() {}
 
 void AzureOptions::ConfigureAnonymousCredentials(const std::string& account_name) {
-  account_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_dfs_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_blob_url = "https://" + account_name + ".blob.core.windows.net/";
   credentials_kind = AzureCredentialsKind::Anonymous;
 }
 
 void AzureOptions::ConfigureAccountKeyCredentials(const std::string& account_name, 
                                                   const std::string& account_key) {
-  account_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_dfs_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_blob_url = "https://" + account_name + ".blob.core.windows.net/";
   storage_credentials_provider = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(account_name, account_key);
   credentials_kind = AzureCredentialsKind::StorageCredentials;
 }
 
 void AzureOptions::ConfigureConnectionStringCredentials(const std::string& connection_string_uri) {
   auto account_name = Azure::Storage::_internal::ParseConnectionString(connection_string_uri).AccountName;
-  account_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_dfs_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_blob_url = "https://" + account_name + ".blob.core.windows.net/";
   connection_string = connection_string_uri;
   credentials_kind = AzureCredentialsKind::ConnectionString;
 }
@@ -102,7 +105,8 @@ void AzureOptions::ConfigureServicePrincipleCredentials(const std::string& accou
                                              const std::string& tenant_id,
                                              const std::string& client_id,
                                              const std::string& client_secret) {
-  account_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_dfs_url = "https://" + account_name + ".dfs.core.windows.net/";
+  account_blob_url = "https://" + account_name + ".blob.core.windows.net/";
   service_principle_credentials_provider = std::make_shared<Azure::Identity::ClientSecretCredential>(tenant_id, client_id, client_secret);
   credentials_kind = AzureCredentialsKind::ServicePrincipleCredentials;
 }
@@ -110,14 +114,21 @@ void AzureOptions::ConfigureServicePrincipleCredentials(const std::string& accou
 void AzureOptions::ConfigureSasCredentials(const std::string& uri) {
   auto src = internal::RemoveTrailingSlash(uri);
   auto first_sep = src.find_first_of("?");
-  account_url = std::string(src.substr(0, first_sep));
   sas_token = std::string(src.substr(first_sep));
+  account_blob_url = std::string(src.substr(0, first_sep));
+  src = internal::RemoveTrailingSlash(account_blob_url);
+  first_sep = src.find("blob.core.windows.net");
+  account_dfs_url = std::string(src.substr(0, first_sep));
+  account_dfs_url += "dfs";
+  account_dfs_url += std::string(src.substr(first_sep + 4));
+  account_dfs_url += "/";
   credentials_kind = AzureCredentialsKind::Sas;
 }
 
 bool AzureOptions::Equals(const AzureOptions& other) const {
   return (scheme == other.scheme && 
-          account_url == other.account_url &&
+          account_dfs_url == other.account_dfs_url &&
+          account_blob_url == other.account_blob_url &&
           credentials_kind == other.credentials_kind);
 }
 
@@ -285,12 +296,7 @@ std::shared_ptr<const KeyValueMetadata> GetObjectMetadata(const ObjectResult& re
 }
 
 template <typename T>
-Status InitServiceClient(std::shared_ptr<T>& client, const AzureOptions options, bool gen1_client) {
-  std::string url = options.account_url;
-  if (gen1_client) {
-    auto sep = url.find("dfs.core.windows.net");
-    url = url.substr(0, sep) + "blob" + url.substr(sep + 3, url.size());
-  }
+Status InitServiceClient(std::shared_ptr<T>& client, const AzureOptions options, const std::string url) {
   if (options.credentials_kind == AzureCredentialsKind::StorageCredentials) {
     client = std::make_shared<T>(url, options.storage_credentials_provider);
   } else if(options.credentials_kind == AzureCredentialsKind::ServicePrincipleCredentials) {
@@ -314,7 +320,17 @@ Status InitPathClient(std::shared_ptr<T>& client, const AzureOptions options, co
   } else if (options.credentials_kind == AzureCredentialsKind::ConnectionString) {
     client = std::make_shared<T>(T::CreateFromConnectionString(options.connection_string, container, path_to_file));
   } else if (options.credentials_kind == AzureCredentialsKind::Sas) {
-    client = std::make_shared<T>(path + "/" + options.sas_token);
+    auto src = internal::RemoveLeadingSlash(path);
+    auto first_sep = src.find("dfs.core.windows.net");
+    std::string p;
+    if (first_sep != std::string::npos) {
+      p = std::string(src.substr(0, first_sep));
+      p += "blob";
+      p += std::string(src.substr(first_sep + 3));
+      client = std::make_shared<T>(p + options.sas_token);
+    } else {
+      client = std::make_shared<T>(path);
+    }
   } else {
     client = std::make_shared<T>(path);
   }
@@ -500,7 +516,8 @@ class ObjectOutputStream final : public io::OutputStream {
       DCHECK_GE(content_length_, 0);
     } catch(std::exception const& e) {
       //new file
-      fileClient_->CreateIfNotExists();
+      std::string s = "";
+      fileClient_->UploadFrom(const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&s[0])), s.size());
       content_length_ = 0;
     }
     return Status::OK();
@@ -708,15 +725,19 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   io::IOContext io_context_;
   std::shared_ptr<Azure::Storage::Blobs::BlobServiceClient> gen1Client_;
   std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeServiceClient> gen2Client_;
-  std::string url;
+  std::string dfs_endpoint_url;
+  std::string blob_endpoint_url;
+  bool isHierarchicalNamespaceEnabled;
 
   explicit Impl(AzureOptions options, io::IOContext io_context) 
       : io_context_(io_context), options_(std::move(options)) {}
 
   Status Init() {
-    InitServiceClient(gen1Client_, options_, true);
-    InitServiceClient(gen2Client_, options_, false);
-    url = options_.account_url;
+    dfs_endpoint_url = options_.account_dfs_url;
+    blob_endpoint_url = options_.account_blob_url;
+    InitServiceClient(gen1Client_, options_, blob_endpoint_url);
+    InitServiceClient(gen2Client_, options_, dfs_endpoint_url);
+    isHierarchicalNamespaceEnabled = gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
     return Status::OK();
   }
 
@@ -742,11 +763,6 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
   Result<bool> DirExists(const std::string& s) {
     std::string uri = s;
-    if (options_.credentials_kind == AzureCredentialsKind::Sas) {
-      auto src = internal::RemoveTrailingSlash(s);
-      auto first_sep = src.find_first_of("?");
-      uri = std::string(src.substr(0, first_sep));
-    }
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(uri));
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
     InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, uri, path.container, path.path_to_file);
@@ -760,11 +776,6 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
   Result<bool> FileExists(const std::string& s) {
     std::string uri = s;
-    if (options_.credentials_kind == AzureCredentialsKind::Sas) {
-      auto src = internal::RemoveTrailingSlash(s);
-      auto first_sep = src.find_first_of("?");
-      uri = std::string(src.substr(0, first_sep));
-    }
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(uri));
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
     InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, uri, path.container, path.path_to_file);
@@ -857,6 +868,17 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     if (path.empty()) {
       return Status::IOError("Cannot delete File, Invalid File Path");
     }
+    if (!isHierarchicalNamespaceEnabled) {
+      if (path.size() > 1) {
+        return Status::IOError("Cannot delete File, Invalid File Path, hierarchical namespace not enabled");
+      }
+      auto blobClient = gen1Client_->GetBlobContainerClient(container).GetBlobClient(path.front());
+      if (!FileExists(blobClient.GetUrl()).ValueOrDie()) {
+        return Status::IOError("Cannot delete File, Invalid File Path");
+      }
+      blobClient.DeleteIfExists();
+      return Status::OK();
+    }
     auto fileSystemClient = gen2Client_->GetFileSystemClient(container);
     if (path.size() == 1) {
       auto fileClient = fileSystemClient.GetFileClient(path.front());
@@ -892,14 +914,24 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     ARROW_ASSIGN_OR_RAISE(auto src_path, AzurePath::FromString(src));
     ARROW_ASSIGN_OR_RAISE(auto dest_path, AzurePath::FromString(dest));
 
+    if (!isHierarchicalNamespaceEnabled) {
+      return Status::IOError("Cannot move, Hierarchical namespace not enabled");
+    }
+    if (src_path.empty() || dest_path.empty() || src_path.path_to_file.empty() || dest_path.path_to_file.empty()) {
+      return Status::IOError("Invalid path provided");
+    }
     if (src_path == dest_path) {
       return Status::OK();
     }
-    if (FileExists(url + src).ValueOrDie()) {
+    if (FileExists(dfs_endpoint_url + src_path.full_path).ValueOrDie()) {
       auto fileSystemClient = gen2Client_->GetFileSystemClient(src_path.container);
       auto path = src_path.path_to_file_parts;
       if (path.size() == 1) {
-        fileSystemClient.RenameFile(path.front(), dest_path.path_to_file);
+        try {
+          fileSystemClient.RenameFile(path.front(), dest_path.path_to_file);
+        } catch (const Azure::Storage::StorageException& exception) {
+          return Status::IOError(exception.RawResponse->GetReasonPhrase());
+        }
         return Status::OK();
       }
       auto directoryClient = fileSystemClient.GetDirectoryClient(path.front());
@@ -912,10 +944,22 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
         directoryClient = directoryClient.GetSubdirectoryClient(*it);
         ++it;
       }
-      directoryClient.RenameFile(it->data(), dest_path.path_to_file);
-    } else if (DirExists(url + src).ValueOrDie()) {
+      try {
+        directoryClient.RenameFile(it->data(), dest_path.path_to_file);
+      } catch (const Azure::Storage::StorageException& exception) {
+        return Status::IOError(exception.RawResponse->GetReasonPhrase());
+      }
+    } else if (DirExists(dfs_endpoint_url + src_path.full_path).ValueOrDie()) {
       auto fileSystemClient = gen2Client_->GetFileSystemClient(src_path.container);
       auto path = src_path.path_to_file_parts;
+      if (path.size() == 1) {
+        try {
+          fileSystemClient.RenameDirectory(path.front(), dest_path.path_to_file);
+        } catch (const Azure::Storage::StorageException& exception) {
+          return Status::IOError(exception.RawResponse->GetReasonPhrase());
+        }
+        return Status::OK();
+      }
       auto directoryClient = fileSystemClient.GetDirectoryClient(path.front());
       std::vector<std::string>::const_iterator it = path.begin();
       std::advance(it, 1);
@@ -926,7 +970,11 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
         directoryClient = directoryClient.GetSubdirectoryClient(*it);
         ++it;
       }
-      directoryClient.RenameSubdirectory(it->data(), dest_path.path_to_file);
+      try {
+        directoryClient.RenameSubdirectory(it->data(), dest_path.path_to_file);
+      } catch (const Azure::Storage::StorageException& exception) {
+        return Status::IOError(exception.RawResponse->GetReasonPhrase());
+      }
     } else {
       return Status::IOError("Invalid path provided");
     }
@@ -937,9 +985,38 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     ARROW_ASSIGN_OR_RAISE(auto src_path, AzurePath::FromString(src));
     ARROW_ASSIGN_OR_RAISE(auto dest_path, AzurePath::FromString(dest));
 
-    if (!(FileExists(url + src)).ValueOrDie()) {
+    if (src_path.empty() || dest_path.empty() || src_path.path_to_file.empty() || dest_path.path_to_file.empty()) {
       return Status::IOError("Cannot copy file, file doesn't exist at src");
     }
+
+    if (!(FileExists(dfs_endpoint_url + src_path.full_path)).ValueOrDie()) {
+      return Status::IOError("Cannot copy file, file doesn't exist at src");
+    }
+
+    if (DirExists(dfs_endpoint_url + dest_path.full_path).ValueOrDie()) {
+      return Status::IOError("Cannot copy file, Invalid destination path");
+    }
+
+    if (!isHierarchicalNamespaceEnabled) {
+      if (src_path.path_to_file_parts.size() > 1 || dest_path.path_to_file_parts.size() > 1) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+      if (dest_path.empty() || dest_path.path_to_file_parts.empty()) {
+        return Status::IOError("Invalid path provided at destination");
+      }
+      if (src_path == dest_path) {
+        return Status::OK();
+      }
+      auto containerClient = gen1Client_->GetBlobContainerClient(dest_path.container);
+      auto fileClient = containerClient.GetBlobClient(dest_path.path_to_file);
+      try {
+        auto response = fileClient.StartCopyFromUri(blob_endpoint_url + src);
+      } catch (const Azure::Storage::StorageException& exception) {
+        return Status::IOError(exception.RawResponse->GetReasonPhrase());
+      }
+      return Status::OK();
+    }
+
     if (dest_path.has_parent()) {
       AzurePath parent_path = dest_path.parent();
       if (parent_path.path_to_file.empty()) {
@@ -948,7 +1025,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
                                "': parent directory of destination does not exist");
         }
       } else {
-        auto exists = DirExists(url + parent_path.full_path);
+        auto exists = DirExists(dfs_endpoint_url + parent_path.full_path);
         if (!(exists.ValueOrDie())) {
           return Status::IOError("Cannot copy file '", src_path.full_path,
                                "': parent directory of destination does not exist");
@@ -960,25 +1037,41 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     }
     auto containerClient = gen1Client_->GetBlobContainerClient(dest_path.container);
     auto fileClient = containerClient.GetBlobClient(dest_path.path_to_file);
-    auto sep = url.find("dfs.core.windows.net");
-    auto gen1_url = url.substr(0, sep) + "blob" + url.substr(sep + 3, url.size());
-    auto response = fileClient.StartCopyFromUri(gen1_url + src);
-    if (response.Value().CopyStatus.HasValue() && (response.Value().CopyStatus.Value() != Azure::Storage::Blobs::Models::CopyStatus::Success)) {
-      return Status::IOError("Error in copying");
+    try {
+      if (options_.credentials_kind == AzureCredentialsKind::Sas) {
+        fileClient.StartCopyFromUri(blob_endpoint_url + src + options_.sas_token);
+      } else {
+        fileClient.StartCopyFromUri(blob_endpoint_url + src);
+      }
+    } catch (const Azure::Storage::StorageException& exception) {
+      return Status::IOError(exception.RawResponse->GetReasonPhrase());
     }
     return Status::OK();
   }
 
   Status ListPaths(const std::string& container, const std::string& path, 
                    std::vector<std::string>* childrenDirs, std::vector<std::string>* childrenFiles, const bool allow_not_found = false) {
+    if (!isHierarchicalNamespaceEnabled) {
+      try {
+        auto paths = gen1Client_->GetBlobContainerClient(container).ListBlobs();
+        for (auto p : paths.Blobs) {
+          std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
+          InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name, container, p.Name);
+          childrenFiles->push_back(container+"/"+p.Name);
+        }
+      } catch (std::exception const& e) {
+        if (!allow_not_found) {
+          return Status::IOError("Path does not exists");
+        }
+      }
+      return Status::OK();
+    }
     if (path.empty()) {
       try {
         auto paths = gen2Client_->GetFileSystemClient(container).ListPaths(false);
-        std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-        InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url + container + "/" + path, container, path);
         for (auto p : paths.Paths) {
           std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-          InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url + container + "/" + p.Name, container, p.Name);
+          InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name, container, p.Name);
           if (pathClient_->GetProperties().Value.IsDirectory) {
             childrenDirs->push_back(container+"/"+p.Name);
           } else {
@@ -1001,7 +1094,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       auto paths = dirClient.ListPaths(false);
       for (auto p : paths.Paths) {
         std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-        InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url + container + "/" + p.Name, container, p.Name);
+        InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name, container, p.Name);
         if (pathClient_->GetProperties().Value.IsDirectory) {
           childrenDirs->push_back(container+"/"+p.Name);
         } else {
@@ -1031,7 +1124,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       FileInfo info;
       // std::string url = gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      GetProperties(url+childFile, &properties);
+      GetProperties(dfs_endpoint_url+childFile, &properties);
       PathInfoToFileInfo(childFile, FileType::File, properties.FileSize, properties.LastModified, &info);
       out->push_back(std::move(info));
     }
@@ -1039,7 +1132,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       FileInfo info;
       // std::string url = gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      GetProperties(url+childDir, &properties);
+      GetProperties(dfs_endpoint_url+childDir, &properties);
       PathInfoToFileInfo(childDir, FileType::Directory, -1, properties.LastModified, &info);
       out->push_back(std::move(info));
       if (select.recursive && nesting_depth < select.max_recursion) {
@@ -1073,6 +1166,27 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
     return Status::OK();
   }
 
+  Status DeleteDirContents(const std::string& container, const std::string& path, const std::vector<std::string>& path_to_file_parts) {
+
+    std::vector<std::string> childrenDirs;
+    std::vector<std::string> childrenFiles;
+
+    Status st = ListPaths(container, path, &childrenDirs, &childrenFiles);
+    if(!st.ok()) {
+      return st;
+    }
+    for (const auto& childFile : childrenFiles) {
+      ARROW_ASSIGN_OR_RAISE(auto filePath, AzurePath::FromString(childFile));
+      DeleteFile(filePath.container, filePath.path_to_file_parts);
+    }
+    for (const auto& childDir : childrenDirs) {
+      ARROW_ASSIGN_OR_RAISE(auto dirPath, AzurePath::FromString(childDir));
+      DeleteDir(dirPath.container, dirPath.path_to_file_parts);
+    }
+    return Status::OK();
+  }
+
+
   Result<std::vector<std::string>> ListContainers() {
     auto outcome = gen2Client_->ListFileSystems();
     std::vector<std::string> containers;
@@ -1084,12 +1198,23 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
   Result<std::shared_ptr<ObjectInputFile>> OpenInputFile(const std::string& s, AzureBlobFileSystem* fs) {
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
-    // std::string url = gen2Client_->GetUrl();
+    
+    if (path.empty()) {
+      return Status::IOError("Invalid path provided");
+    }
+    if (!isHierarchicalNamespaceEnabled) {
+      if (path.path_to_file_parts.size() > 1) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+    }
+    if (!(FileExists(dfs_endpoint_url + path.full_path)).ValueOrDie()) {
+      return Status::IOError("Invalid path provided");
+    }
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url + path.full_path, path.container, path.path_to_file);
 
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeFileClient> fileClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, dfs_endpoint_url + path.full_path, path.container, path.path_to_file);
 
     auto ptr = std::make_shared<ObjectInputFile>(pathClient_, fileClient_, fs->io_context(), path);
     RETURN_NOT_OK(ptr->Init());
@@ -1099,11 +1224,24 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   Result<std::shared_ptr<ObjectOutputStream>> OpenOutputStream(const std::string& s, const std::shared_ptr<const KeyValueMetadata>& metadata, AzureBlobFileSystem* fs) {
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
     
+    if (path.empty() || path.path_to_file.empty()) {
+      return Status::IOError("Invalid path provided");
+    }
+    std::string endpoint_url = dfs_endpoint_url;
+    if (!isHierarchicalNamespaceEnabled) {
+      if (path.path_to_file_parts.size() > 1) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+      endpoint_url = blob_endpoint_url;
+    }
+    if (DirExists(dfs_endpoint_url + path.full_path).ValueOrDie()) {
+      return Status::IOError("Invalid path provided");
+    }
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, endpoint_url + path.full_path, path.container, path.path_to_file);
 
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeFileClient> fileClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, endpoint_url + path.full_path, path.container, path.path_to_file);
 
     if (path.has_parent()) {
       AzurePath parent_path = path.parent();
@@ -1113,7 +1251,7 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
                                "': parent directory does not exist");
         }
       } else {
-        auto exists = DirExists(url + parent_path.full_path);
+        auto exists = DirExists(dfs_endpoint_url + parent_path.full_path);
         if (!(exists.ValueOrDie())) {
           return Status::IOError("Cannot write to file '", path.full_path,
                                "': parent directory does not exist");
@@ -1128,11 +1266,17 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
   Result<std::shared_ptr<ObjectAppendStream>> OpenAppendStream(const std::string& s, const std::shared_ptr<const KeyValueMetadata>& metadata, AzureBlobFileSystem* fs) {
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
 
+    if (!isHierarchicalNamespaceEnabled) {
+      if (path.path_to_file_parts.size() > 1) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+    }
+
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url+s, path.container, path.path_to_file);
 
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeFileClient> fileClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, url+s, path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, dfs_endpoint_url+s, path.container, path.path_to_file);
 
     auto ptr = std::make_shared<ObjectAppendStream>(pathClient_, fileClient_, fs->io_context(), path, metadata);
     RETURN_NOT_OK(ptr->Init());
@@ -1150,11 +1294,19 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
 
     ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(info.path()));
 
+    if (!isHierarchicalNamespaceEnabled) {
+      if (path.path_to_file_parts.size() > 1) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+    }
+    if (!(FileExists(dfs_endpoint_url + info.path())).ValueOrDie()) {
+      return Status::IOError("Invalid path provided");
+    }
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, url+info.path(), path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, dfs_endpoint_url + info.path(), path.container, path.path_to_file);
     
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeFileClient> fileClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, url+info.path(), path.container, path.path_to_file);
+    InitPathClient<Azure::Storage::Files::DataLake::DataLakeFileClient>(fileClient_, options_, dfs_endpoint_url + info.path(), path.container, path.path_to_file);
 
     auto ptr = std::make_shared<ObjectInputFile>(pathClient_, fileClient_, fs->io_context(), path, info.size());
     RETURN_NOT_OK(ptr->Init());
@@ -1197,6 +1349,13 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
   FileInfo info;
   info.set_path(s);
 
+  if (!impl_->isHierarchicalNamespaceEnabled) {
+    if (path.path_to_file_parts.size() > 1) {
+      info.set_type(FileType::NotFound);
+      return info;
+    }
+  }
+
   if (path.empty()) {
     // It's the root path ""
     info.set_type(FileType::Directory);
@@ -1212,16 +1371,16 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
     return info;
   } else {
     // It's an object
-    ARROW_ASSIGN_OR_RAISE(bool file_exists, impl_->FileExists(impl_->url + s));
+    ARROW_ASSIGN_OR_RAISE(bool file_exists, impl_->FileExists(impl_->dfs_endpoint_url + path.full_path));
     if (file_exists) {
       // "File" object found
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetProperties(impl_->url + s, &properties);
+      impl_->GetProperties(impl_->dfs_endpoint_url + path.full_path, &properties);
       FileObjectToInfo(properties, &info);
       return info;
     }
     // Not found => perhaps it's a "directory"
-    auto is_dir = impl_->DirExists(impl_->url + s);
+    auto is_dir = impl_->DirExists(impl_->dfs_endpoint_url + path.full_path);
     if (is_dir.ValueOrDie()) {
       info.set_type(FileType::Directory);
     } else {
@@ -1243,12 +1402,39 @@ Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& sele
       FileInfo info;
       // std::string url = impl_->gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetProperties(impl_->url + container, &properties);
+      impl_->GetProperties(impl_->dfs_endpoint_url + container, &properties);
       PathInfoToFileInfo(container, FileType::Directory, -1, properties.LastModified, &info);
       results.push_back(std::move(info));
       if (select.recursive) {
         RETURN_NOT_OK(impl_->Walk(select, container, "", 0, &results));
       }
+    }
+    return results;
+  }
+
+  if (!impl_->isHierarchicalNamespaceEnabled) {
+    if (base_path.path_to_file_parts.size() > 1) {
+      if (!select.allow_not_found) {
+        return Status::IOError("Invalid path provided, hierarchical namespace not enabled");
+      }
+      return results;
+    }
+  }
+
+  if (base_path.path_to_file.empty() && !(impl_->ContainerExists(base_path.container).ValueOrDie())) {
+    if (!select.allow_not_found) {
+      return Status::IOError("Invalid path provided");
+    }
+    return results;
+  }
+
+  if (impl_->FileExists(impl_->dfs_endpoint_url + base_path.full_path).ValueOrDie()) {
+    return Status::IOError("Invalid path provided");
+  }
+
+  if (!(base_path.path_to_file.empty()) && !(impl_->DirExists(impl_->dfs_endpoint_url + base_path.full_path).ValueOrDie())) {
+    if (!select.allow_not_found) {
+      return Status::IOError("Invalid path provided");
     }
     return results;
   }
@@ -1261,13 +1447,21 @@ Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& sele
 Status AzureBlobFileSystem::CreateDir(const std::string& s, bool recursive) {
   ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
 
-  // std::string url = impl_->gen2Client_->GetUrl();
-  if ((impl_->FileExists(impl_->url + s)).ValueOrDie()) {
+  if (path.empty()) {
+    return Status::IOError("Cannot create directory, root path given");
+  }
+  if ((impl_->FileExists(impl_->dfs_endpoint_url + path.full_path)).ValueOrDie()) {
     return Status::IOError("Cannot create directory, file exists at path");
   }
   if (path.path_to_file.empty()) {
     // Create container
     return impl_->CreateContainer(path.container);
+  }
+  //Hierarchical namespace not enabled type storage accounts
+  if (!impl_->isHierarchicalNamespaceEnabled) {
+    if (!path.path_to_file.empty()) {
+      return Status::IOError("Cannot create directory, storage account doesn't have hierarchical namespace enabled");
+    }
   }
   if (recursive) {
     // Ensure container exists
@@ -1286,10 +1480,18 @@ Status AzureBlobFileSystem::CreateDir(const std::string& s, bool recursive) {
     // Check parent dir exists
     if (path.has_parent()) {
       AzurePath parent_path = path.parent();
-      auto exists = impl_->DirExists(impl_->url + parent_path.full_path);
-      if (!(exists.ValueOrDie())) {
-        return Status::IOError("Cannot create directory '", path.full_path,
+      if (parent_path.path_to_file.empty()) {
+        auto exists = impl_->ContainerExists(parent_path.container);
+        if (!(exists.ValueOrDie())) {
+          return Status::IOError("Cannot create directory '", path.full_path,
                                "': parent directory does not exist");
+        }
+      } else {
+        auto exists = impl_->DirExists(impl_->dfs_endpoint_url + parent_path.full_path);
+        if (!(exists.ValueOrDie())) {
+          return Status::IOError("Cannot create directory '", path.full_path,
+                                  "': parent directory does not exist");
+        }
       }
     }
     return impl_->CreateEmptyDir(path.container, path.path_to_file_parts);
@@ -1304,13 +1506,39 @@ Status AzureBlobFileSystem::DeleteDir(const std::string& s) {
   if (path.path_to_file.empty()) {
     return impl_->DeleteContainer(path.container);
   }
+  if ((impl_->FileExists(impl_->dfs_endpoint_url + path.full_path)).ValueOrDie()) {
+    return Status::IOError("Cannot delete directory, file exists at path");
+  }
+
+  //Hierarchical namespace not enabled type storage accounts
+  if (!impl_->isHierarchicalNamespaceEnabled) {
+    if (!path.path_to_file.empty()) {
+      return Status::IOError("Cannot delete directory, storage account doesn't have hierarchical namespace enabled");
+    }
+  }
   return impl_->DeleteDir(path.container, path.path_to_file_parts);
 }
 
 Status AzureBlobFileSystem::DeleteDirContents(const std::string& s) {
-  RETURN_NOT_OK(DeleteDir(s));
-  RETURN_NOT_OK(CreateDir(s));
-  return Status::OK();
+  ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
+
+  if (path.empty()) {
+    return Status::IOError("Invalid path provided");
+  }
+
+  if (path.path_to_file.empty() && !(impl_->ContainerExists(path.container).ValueOrDie())) {
+    return Status::IOError("Invalid path provided1");
+  }
+
+  if (impl_->FileExists(impl_->dfs_endpoint_url + path.full_path).ValueOrDie()) {
+    return Status::IOError("Invalid path provided2");
+  }
+
+  if (!(path.path_to_file.empty()) && !(impl_->DirExists(impl_->dfs_endpoint_url + path.full_path).ValueOrDie())) {
+    return Status::IOError("Invalid path provided3");
+  }
+
+  return impl_->DeleteDirContents(path.container, path.path_to_file, path.path_to_file_parts);
 }
 
 Status AzureBlobFileSystem::DeleteRootDirContents() {
@@ -1319,7 +1547,6 @@ Status AzureBlobFileSystem::DeleteRootDirContents() {
 
 Status AzureBlobFileSystem::DeleteFile(const std::string& s) {
   ARROW_ASSIGN_OR_RAISE(auto path, AzurePath::FromString(s));
-
   return impl_->DeleteFile(path.container, path.path_to_file_parts);
 }
 

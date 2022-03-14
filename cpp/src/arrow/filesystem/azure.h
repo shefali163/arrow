@@ -46,7 +46,8 @@ enum class AzureCredentialsKind : int8_t {
 /// Options for the AzureFileSystem implementation.
 struct ARROW_EXPORT AzureOptions{
   std::string scheme;
-  std::string account_url;
+  std::string account_dfs_url;
+  std::string account_blob_url;
   AzureCredentialsKind credentials_kind = AzureCredentialsKind::Anonymous;
 
   std::string sas_token;
