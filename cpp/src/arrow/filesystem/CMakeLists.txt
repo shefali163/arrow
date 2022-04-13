@@ -32,10 +32,6 @@ if(ARROW_GCS)
   add_arrow_test(gcsfs_test EXTRA_LABELS filesystem)
 endif()
 
-if(ARROW_AZURE)
-  add_arrow_test(azurefs_test EXTRA_LABELS filesystem)
-endif()
-
 if(ARROW_S3)
   add_arrow_test(s3fs_test EXTRA_LABELS filesystem)
   if(TARGET arrow-s3fs-test)

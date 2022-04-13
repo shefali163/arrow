@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/filesystem/azure.h"
+#include "arrow/filesystem/azure/azurefs.h"
 
 #include <azure/storage/blobs.hpp>
 #include <azure/storage/files/datalake.hpp>
@@ -118,10 +118,7 @@ void AzureOptions::ConfigureSasCredentials(const std::string& uri) {
   account_blob_url = std::string(src.substr(0, first_sep));
   src = internal::RemoveTrailingSlash(account_blob_url);
   first_sep = src.find("blob.core.windows.net");
-  account_dfs_url = std::string(src.substr(0, first_sep));
-  account_dfs_url += "dfs";
-  account_dfs_url += std::string(src.substr(first_sep + 4));
-  account_dfs_url += "/";
+  account_dfs_url = std::string(src.substr(0, first_sep)) + "dfs" + std::string(src.substr(first_sep + 4)) +"/";
   credentials_kind = AzureCredentialsKind::Sas;
 }
 
@@ -324,9 +321,7 @@ Status InitPathClient(std::shared_ptr<T>& client, const AzureOptions options, co
     auto first_sep = src.find("dfs.core.windows.net");
     std::string p;
     if (first_sep != std::string::npos) {
-      p = std::string(src.substr(0, first_sep));
-      p += "blob";
-      p += std::string(src.substr(first_sep + 3));
+      p = std::string(src.substr(0, first_sep)) + "blob" + std::string(src.substr(first_sep + 3));
       client = std::make_shared<T>(p + options.sas_token);
     } else {
       client = std::make_shared<T>(path);
@@ -796,46 +791,6 @@ class AzureBlobFileSystem::Impl : public std::enable_shared_from_this<AzureBlobF
       ++it;
     }
     directoryClient.CreateIfNotExists();
-    return Status::OK();
-  }
-
-  Status IsNonEmptyDirectory(const AzurePath& path, const std::string full_path, bool* out) {
-    *out = false;
-    std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, full_path, path.container, path.path_to_file);
-    try {
-      auto properties = pathClient_->GetProperties();
-      if (properties.Value.IsDirectory) {
-        std::vector<std::string> childrenDirs;
-        std::vector<std::string> childrenFiles;
-        ListPaths(path.container, path.path_to_file, &childrenDirs, &childrenFiles);
-        if (childrenFiles.size()!=0 || childrenDirs.size()!=0) {
-          *out = true;  
-        }
-      }
-    } catch (std::exception const& e) {
-      *out = false;
-    }
-    return Status::OK();
-  }
-
-  Status IsEmptyDirectory(const AzurePath& path, const std::string full_path, bool* out) {
-    *out = false;
-    std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
-    InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(pathClient_, options_, full_path, path.container, path.path_to_file);
-    try {
-      auto properties = pathClient_->GetProperties();
-      if (properties.Value.IsDirectory) {
-        std::vector<std::string> childrenDirs;
-        std::vector<std::string> childrenFiles;
-        ListPaths(path.container, path.path_to_file, &childrenDirs, &childrenFiles);
-        if (childrenFiles.size()==0 && childrenDirs.size()==0) {
-          *out = true;  
-        }
-      }
-    } catch (std::exception const& e) {
-      *out = false;
-    }
     return Status::OK();
   }
 

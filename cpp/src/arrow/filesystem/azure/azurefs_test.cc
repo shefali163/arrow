@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/filesystem/azure.h"
+#include "arrow/filesystem/azure/azurefs.h"
 
 #include <chrono>
 #include <thread>
@@ -41,102 +41,81 @@ class AzureEnvTestMixin{
  public:
   static AzureOptions options_;
   static std::shared_ptr<AzureBlobFileSystem> fs_;
-  static std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeServiceClient> client_;
-  static std::shared_ptr<Azure::Storage::Blobs::BlobServiceClient> client1_;
+  static std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeServiceClient> gen2Client_;
+  static std::shared_ptr<Azure::Storage::Blobs::BlobServiceClient> gen1Client_;
 
   AzureEnvTestMixin() {};
 
   const std::string& GetAdlsGen2AccountName() {
-    const static std::string connectionString = [&]() -> std::string {
-      // if (!AdlsGen2AccountName.empty()) {
-      //   return AdlsGen2AccountName;
-      // }
+    const static std::string accountName = [&]() -> std::string {
       return std::getenv("ADLS_GEN2_ACCOUNT_NAME");
     }();
-    return connectionString;
+    return accountName;
   }
 
   const std::string& GetAdlsGen2AccountKey() {
-    const static std::string connectionString = [&]() -> std::string {
-      // if (!AdlsGen2AccountKey.empty()) {
-      //   return AdlsGen2AccountKey;
-      // }
+    const static std::string accountKey = [&]() -> std::string {
       return std::getenv("ADLS_GEN2_ACCOUNT_KEY");
     }();
-    return connectionString;
+    return accountKey;
   }
 
   const std::string& GetAdlsGen2ConnectionString() {
     const static std::string connectionString = [&]() -> std::string {
-      if (!AdlsGen2ConnectionStringValue.empty()) {
-        return AdlsGen2ConnectionStringValue;
-      }
       return std::getenv("ADLS_GEN2_CONNECTION_STRING");
     }();
     return connectionString;
   }
 
   const std::string& GetAdlsGen2SasUrl() {
-    const static std::string connectionString = [&]() -> std::string {
-      // if (!AdlsGen2SasUrl.empty()) {
-      //   return AdlsGen2SasUrl;
-      // }
+    const static std::string sasUrl = [&]() -> std::string {
       return std::getenv("ADLS_GEN2_SASURL");
     }();
-    return connectionString;
+    return sasUrl;
   }
 
   const std::string& GetAadTenantId() {
-    const static std::string connectionString = [&]() -> std::string {
-      if (!AadTenantIdValue.empty()) {
-        return AadTenantIdValue;
-      }
+    const static std::string tenantId = [&]() -> std::string {
       return std::getenv("AAD_TENANT_ID");
     }();
-    return connectionString;
+    return tenantId;
   }
 
   const std::string& GetAadClientId() {
-    const static std::string connectionString = [&]() -> std::string {
-      if (!AadClientIdValue.empty()) {
-        return AadClientIdValue;
-      }
+    const static std::string clientId = [&]() -> std::string {
       return std::getenv("AAD_CLIENT_ID");
     }();
-    return connectionString;
+    return clientId;
   }
 
   const std::string& GetAadClientSecret() {
-    const static std::string connectionString = [&]() -> std::string {
-      if (!AadClientSecretValue.empty()) {
-        return AadClientSecretValue;
-      }
+    const static std::string clientSecret = [&]() -> std::string {
       return std::getenv("AAD_CLIENT_SECRET");
     }();
-    return connectionString;
+    return clientSecret;
   }
 
- private:
-  const std::string& AdlsGen2AccountName = std::getenv("ADLS_GEN2_ACCOUNT_NAME");
-  const std::string& AdlsGen2AccountKey = std::getenv("ADLS_GEN2_ACCOUNT_KEY");
-  const std::string& AdlsGen2ConnectionStringValue = std::getenv("ADLS_GEN2_CONNECTION_STRING");
-  const std::string& AdlsGen2SasUrl = std::getenv("ADLS_GEN2_SASURL");
-  const std::string& AadTenantIdValue = std::getenv("AAD_TENANT_ID");
-  const std::string& AadClientIdValue = std::getenv("AAD_CLIENT_ID");
-  const std::string& AadClientSecretValue = std::getenv("AAD_CLIENT_SECRET");
+//  private:
+//   const std::string& AdlsGen2AccountName = std::getenv("ADLS_GEN2_ACCOUNT_NAME");
+//   const std::string& AdlsGen2AccountKey = std::getenv("ADLS_GEN2_ACCOUNT_KEY");
+//   const std::string& AdlsGen2ConnectionStringValue = std::getenv("ADLS_GEN2_CONNECTION_STRING");
+//   const std::string& AdlsGen2SasUrl = std::getenv("ADLS_GEN2_SASURL");
+//   const std::string& AadTenantIdValue = std::getenv("AAD_TENANT_ID");
+//   const std::string& AadClientIdValue = std::getenv("AAD_CLIENT_ID");
+//   const std::string& AadClientSecretValue = std::getenv("AAD_CLIENT_SECRET");
 };
 
 AzureOptions AzureEnvTestMixin::options_;
 std::shared_ptr<AzureBlobFileSystem> AzureEnvTestMixin::fs_;
-std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeServiceClient> AzureEnvTestMixin::client_;
-std::shared_ptr<Azure::Storage::Blobs::BlobServiceClient> AzureEnvTestMixin::client1_;
+std::shared_ptr<Azure::Storage::Files::DataLake::DataLakeServiceClient> AzureEnvTestMixin::gen2Client_;
+std::shared_ptr<Azure::Storage::Blobs::BlobServiceClient> AzureEnvTestMixin::gen1Client_;
 
 
 class SetupEnvironment : public ::testing::Environment, public AzureEnvTestMixin{
  public:
 
   bool isHeirarchialNamespaceEnabled() {
-    return AzureEnvTestMixin::client1_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
+    return AzureEnvTestMixin::gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
   }
 
   void MakeFileSystem() {
@@ -144,8 +123,8 @@ class SetupEnvironment : public ::testing::Environment, public AzureEnvTestMixin
     const std::string& account_name = GetAdlsGen2AccountName();
     AzureEnvTestMixin::options_.ConfigureAccountKeyCredentials(account_name, account_key);
     auto url = options_.account_dfs_url;
-    AzureEnvTestMixin::client_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakeServiceClient>(url, options_.storage_credentials_provider);
-    AzureEnvTestMixin::client1_ = std::make_shared<Azure::Storage::Blobs::BlobServiceClient>(options_.account_blob_url, options_.storage_credentials_provider);
+    AzureEnvTestMixin::gen2Client_ = std::make_shared<Azure::Storage::Files::DataLake::DataLakeServiceClient>(url, options_.storage_credentials_provider);
+    AzureEnvTestMixin::gen1Client_ = std::make_shared<Azure::Storage::Blobs::BlobServiceClient>(options_.account_blob_url, options_.storage_credentials_provider);
     auto result = AzureBlobFileSystem::Make(options_);
     if (!result.ok()) {
       ARROW_LOG(INFO)
@@ -158,16 +137,16 @@ class SetupEnvironment : public ::testing::Environment, public AzureEnvTestMixin
 
   void SetUp() override {
     {
-      auto fileSystemClient = AzureEnvTestMixin::client_->GetFileSystemClient("container");
+      auto fileSystemClient = AzureEnvTestMixin::gen2Client_->GetFileSystemClient("container");
       fileSystemClient.CreateIfNotExists();
-      fileSystemClient = AzureEnvTestMixin::client_->GetFileSystemClient("empty-container");
+      fileSystemClient = AzureEnvTestMixin::gen2Client_->GetFileSystemClient("empty-container");
       fileSystemClient.CreateIfNotExists();
     }
     {
       if (isHeirarchialNamespaceEnabled()) {
-        auto directoryClient = AzureEnvTestMixin::client_->GetFileSystemClient("container").GetDirectoryClient("emptydir");
+        auto directoryClient = AzureEnvTestMixin::gen2Client_->GetFileSystemClient("container").GetDirectoryClient("emptydir");
         directoryClient.CreateIfNotExists();
-        directoryClient = AzureEnvTestMixin::client_->GetFileSystemClient("container").GetDirectoryClient("somedir");
+        directoryClient = AzureEnvTestMixin::gen2Client_->GetFileSystemClient("container").GetDirectoryClient("somedir");
         directoryClient.CreateIfNotExists();
         directoryClient = directoryClient.GetSubdirectoryClient("subdir");
         directoryClient.CreateIfNotExists();
@@ -175,7 +154,7 @@ class SetupEnvironment : public ::testing::Environment, public AzureEnvTestMixin
         fileClient.CreateIfNotExists();
         std::string s = "sub data";
         fileClient.UploadFrom(const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&s[0])), s.size());
-        fileClient = client_->GetFileSystemClient("container").GetFileClient("somefile");
+        fileClient = gen2Client_->GetFileSystemClient("container").GetFileClient("somefile");
         fileClient.CreateIfNotExists();
         s = "some data";
         fileClient.UploadFrom(const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&s[0])), s.size());
@@ -188,9 +167,9 @@ class SetupEnvironment : public ::testing::Environment, public AzureEnvTestMixin
   }
 
   void TearDown() override {
-    auto containers = AzureEnvTestMixin::client_->ListFileSystems();
+    auto containers = AzureEnvTestMixin::gen2Client_->ListFileSystems();
     for(auto c:containers.FileSystems) {
-      auto fileSystemClient = AzureEnvTestMixin::client_->GetFileSystemClient(c.Name);
+      auto fileSystemClient = AzureEnvTestMixin::gen2Client_->GetFileSystemClient(c.Name);
       fileSystemClient.DeleteIfExists();
     }
   }
@@ -538,13 +517,13 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamBlobStorage) {
   // Create new empty file
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "");
 
   // Create new file with 1 small write
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile2"));
   ASSERT_OK(stream->Write("some data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile2", "some data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile2", "some data");
 
   // Create new file with 3 small writes
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile3"));
@@ -552,7 +531,7 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamBlobStorage) {
   ASSERT_OK(stream->Write(""));
   ASSERT_OK(stream->Write("new data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile3", "some new data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile3", "some new data");
 
   // Create new file with some large writes
   std::string s1, s2, s3, s4, s5, expected;
@@ -570,18 +549,18 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamBlobStorage) {
     input.back() = 'x';
   }
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile4", expected);
+  AssertObjectContents(gen2Client_.get(), "container", "newfile4", expected);
 
   // Overwrite
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Write("overwritten data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "overwritten data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "overwritten data");
 
   // Overwrite and make empty
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "");
 }
 
 TEST_F(TestAzureFileSystem, DeleteDirContentsBlobStorage) {
@@ -1009,13 +988,13 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamGen2) {
   // Create new empty file
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "");
 
   // Create new file with 1 small write
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile2"));
   ASSERT_OK(stream->Write("some data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile2", "some data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile2", "some data");
 
   // Create new file with 3 small writes
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile3"));
@@ -1023,7 +1002,7 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamGen2) {
   ASSERT_OK(stream->Write(""));
   ASSERT_OK(stream->Write("new data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile3", "some new data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile3", "some new data");
 
   // Create new file with some large writes
   std::string s1, s2, s3, s4, s5, expected;
@@ -1041,18 +1020,18 @@ TEST_F(TestAzureFileSystem, OpenOutputStreamGen2) {
     input.back() = 'x';
   }
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile4", expected);
+  AssertObjectContents(gen2Client_.get(), "container", "newfile4", expected);
 
   // Overwrite
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Write("overwritten data"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "overwritten data");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "overwritten data");
 
   // Overwrite and make empty
   ASSERT_OK_AND_ASSIGN(stream, fs_->OpenOutputStream("container/newfile1"));
   ASSERT_OK(stream->Close());
-  AssertObjectContents(client_.get(), "container", "newfile1", "");
+  AssertObjectContents(gen2Client_.get(), "container", "newfile1", "");
 }
 
 TEST_F(TestAzureFileSystem, DeleteDirContentsGen2) {

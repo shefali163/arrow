@@ -61,6 +61,7 @@ pip install \
 pip install "delocate>=0.9"
 
 echo "=== (${PYTHON_VERSION}) Building Arrow C++ libraries ==="
+: ${ARROW_AZURE:=OFF}
 : ${ARROW_DATASET:=ON}
 : ${ARROW_FLIGHT:=ON}
 : ${ARROW_GANDIVA:=OFF}
@@ -90,6 +91,7 @@ mkdir -p ${build_dir}/build
 pushd ${build_dir}/build
 
 cmake \
+    -DARROW_AZURE=${ARROW_AZURE} \
     -DARROW_BUILD_SHARED=ON \
     -DCMAKE_APPLE_SILICON_PROCESSOR=arm64 \
     -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} \

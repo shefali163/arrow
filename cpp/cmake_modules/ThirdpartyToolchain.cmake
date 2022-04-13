@@ -4311,21 +4311,51 @@ if(ARROW_S3)
   endif()
 endif()
 
+macro(build_azuresdk)
+  message(STATUS "Building Azure C++ SDK from source")
+
+  set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
+  set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
+
+  set(AZURESDK_CMAKE_ARGS
+      ${EP_COMMON_CMAKE_ARGS}
+      -DBUILD_TESTING=OFF
+      -DCMAKE_INSTALL_LIBDIR=lib
+      "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
+      -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX})
+
+  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
+
+  # Azure C++ SDK related libraries to link statically
+  set(_AZURESDK_LIBS
+      azure-core
+      azure-identity
+      azure-storage-blobs
+      azure-storage-common
+      azure-storage-files-datalake)
+  set(AZURESDK_LIBRARIES)
+  set(AZURESDK_LIBRARIES_CPP)
+  foreach(_AZURESDK_LIB ${_AZURESDK_LIBS})
+    string(TOUPPER ${_AZURESDK_LIB} _AZURESDK_LIB_UPPER)
+    string(REPLACE "-" "_" _AZURESDK_LIB_NAME_PREFIX ${_AZURESDK_LIB_UPPER})
+    list(APPEND AZURESDK_LIBRARIES_CPP "${_AZURESDK_LIB}-cpp")
+    set(_AZURESDK_TARGET_NAME Azure::${_AZURESDK_LIB})
+    list(APPEND AZURESDK_LIBRARIES ${_AZURESDK_TARGET_NAME})
+  endforeach()
+
+  set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
+endmacro()
+
 if(ARROW_AZURE)
-  include_directories(SYSTEM $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/include)
-  set(azure-core-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-core-cpp)
-  set(azure-identity-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-identity-cpp)
-  set(azure-storage-blobs-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-storage-blobs-cpp)
-  set(azure-storage-common-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-storage-common-cpp)
-  set(azure-storage-files-datalake-cpp_DIR $ENV{VCPKG_INSTALL_DIR}/installed/x64-linux/share/azure-storage-files-datalake-cpp)
-  
-  find_package(azure-core-cpp CONFIG REQUIRED)
-  find_package(azure-identity-cpp CONFIG REQUIRED)
-  find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-  find_package(azure-storage-common-cpp CONFIG REQUIRED)
-  find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
-  
-  set(AZURE_SDK_LINK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-common Azure::azure-storage-blobs Azure::azure-storage-files-datalake)
+  build_azuresdk()
+
+  foreach(AZURESDK_LIBRARY_CPP ${AZURESDK_LIBRARIES_CPP})
+    find_package(${AZURESDK_LIBRARY_CPP} CONFIG REQUIRED)
+  endforeach()
+
+  include_directories(SYSTEM ${AZURESDK_INCLUDE_DIR})
+  message(STATUS "Found AZURE SDK headers: ${AZURESDK_INCLUDE_DIR}")
+  message(STATUS "Found AZURE SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
 endif()
 
 message(STATUS "All bundled static libraries: ${ARROW_BUNDLED_STATIC_LIBS}")

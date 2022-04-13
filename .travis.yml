@@ -94,6 +94,7 @@ jobs:
         # aws-sdk-cpp.
         DOCKER_RUN_ARGS: >-
           "
+          -e ARROW_AZURE=OFF
           -e ARROW_BUILD_STATIC=OFF
           -e ARROW_FLIGHT=ON
           -e ARROW_GCS=OFF

@@ -48,6 +48,7 @@ rm -rf /arrow/python/pyarrow/*.so
 rm -rf /arrow/python/pyarrow/*.so.*
 
 echo "=== (${PYTHON_VERSION}) Building Arrow C++ libraries ==="
+: ${ARROW_AZURE:=OFF}
 : ${ARROW_DATASET:=ON}
 : ${ARROW_FLIGHT:=ON}
 : ${ARROW_GANDIVA:=OFF}
@@ -82,6 +83,7 @@ fi
 mkdir /tmp/arrow-build
 pushd /tmp/arrow-build
 cmake \
+    -DARROW_AZURE=${ARROW_AZURE} \
     -DARROW_BROTLI_USE_SHARED=OFF \
     -DARROW_BUILD_SHARED=ON \
     -DARROW_BUILD_STATIC=OFF \
