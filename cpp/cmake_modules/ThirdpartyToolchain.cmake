@@ -4600,12 +4600,33 @@ macro(build_azuresdk)
   set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
   set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
 
+  # provide hint for AWS SDK to link with the already located openssl
+  get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
+
   set(AZURESDK_CMAKE_ARGS
       ${EP_COMMON_CMAKE_ARGS}
       -DBUILD_TESTING=OFF
+      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT}
       -DCMAKE_INSTALL_LIBDIR=lib
       "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
       -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX})
+
+  # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
+  if(UNIX)
+    # on Linux and macOS curl seems to be required
+    find_curl()
+    get_filename_component(CURL_ROOT_HINT "${CURL_INCLUDE_DIRS}" DIRECTORY)
+    # get_filename_component(ZLIB_ROOT_HINT "${ZLIB_INCLUDE_DIRS}" DIRECTORY)
+
+    # provide hint for AWS SDK to link with the already located libcurl and zlib
+    list(APPEND
+          AZURESDK_CMAKE_ARGS
+          -DCURL_LIBRARY=${CURL_ROOT_HINT}/lib
+          -DCURL_INCLUDE_DIR=${CURL_ROOT_HINT}/include
+        #  -DZLIB_LIBRARY=${ZLIB_ROOT_HINT}/lib
+        #  -DZLIB_INCLUDE_DIR=${ZLIB_ROOT_HINT}/include
+    )
+  endif()
 
   file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
 
@@ -4632,6 +4653,7 @@ macro(build_azuresdk)
                                      INTERFACE_INCLUDE_DIRECTORIES
                                      "${AZURESDK_INCLUDE_DIR}")
     set("${_AZURESDK_LIB_NAME_PREFIX}_STATIC_LIBRARY" ${_AZURESDK_STATIC_LIBRARY})
+    # find_package(OpenSSL REQUIRED)
     target_link_libraries(${_AZURESDK_TARGET_NAME} INTERFACE LibXml2::LibXml2)
     list(APPEND AZURESDK_LIBRARIES ${_AZURESDK_TARGET_NAME})
   endforeach()
@@ -4677,11 +4699,36 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
+
+  if(UNIX)
+    # on Linux and macOS curl seems to be required
+    set_property(TARGET Azure::azure-core
+                 APPEND
+                 PROPERTY INTERFACE_LINK_LIBRARIES CURL::libcurl)
+    set_property(TARGET CURL::libcurl
+                 APPEND
+                 PROPERTY INTERFACE_LINK_LIBRARIES OpenSSL::SSL)
+    if(TARGET zlib_ep)
+      set_property(TARGET AZure::azure-core
+                   APPEND
+                   PROPERTY INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
+      add_dependencies(azure_core_ep zlib_ep)
+    endif()
+  elseif(WIN32)
+    set_property(TARGET azure-core
+                 APPEND
+                 PROPERTY INTERFACE_LINK_LIBRARIES
+                          "winhttp.lib"
+                          "bcrypt.lib"
+                          "wininet.lib"
+                          "userenv.lib"
+                          "version.lib")
+  endif()
 endmacro()
 
 if(ARROW_AZURE)
   build_azuresdk()
-  find_curl()
+  # find_curl()
   # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
   find_package(LibXml2 REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
