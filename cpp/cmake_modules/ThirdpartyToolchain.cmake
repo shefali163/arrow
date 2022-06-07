@@ -4709,13 +4709,13 @@ macro(build_azuresdk)
                  APPEND
                  PROPERTY INTERFACE_LINK_LIBRARIES OpenSSL::SSL)
     if(TARGET zlib_ep)
-      set_property(TARGET AZure::azure-core
+      set_property(TARGET Azure::azure-core
                    APPEND
                    PROPERTY INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
       add_dependencies(azure_core_ep zlib_ep)
     endif()
   elseif(WIN32)
-    set_property(TARGET azure-core
+    set_property(TARGET Azure::azure-core
                  APPEND
                  PROPERTY INTERFACE_LINK_LIBRARIES
                           "winhttp.lib"
