@@ -4599,32 +4599,52 @@ macro(build_azuresdk)
 
   set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
   set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
+  set(AZURESDK_LIB_DIR "lib")
+
+  if(WIN32)
+    # On Windows, need to match build types
+    set(AZURESDK_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+  else()
+    # Otherwise, always build in release mode.
+    # Especially with gcc, debug builds can fail with "asm constraint" errors:
+    # https://github.com/TileDB-Inc/TileDB/issues/1351
+    set(AZURESDK_BUILD_TYPE release)
+  endif()
+
+  set(AZURESDK_COMMON_CMAKE_ARGS
+      ${EP_COMMON_CMAKE_ARGS}
+      -DBUILD_SHARED_LIBS=OFF
+      -DCMAKE_BUILD_TYPE=${AZURESDK_BUILD_TYPE}
+      -DCMAKE_INSTALL_LIBDIR=${AZURESDK_LIB_DIR}
+      -DENABLE_TESTING=OFF
+      -DENABLE_UNITY_BUILD=ON
+      "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
+      "-DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX}")
 
   # provide hint for AWS SDK to link with the already located openssl
   get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
 
   set(AZURESDK_CMAKE_ARGS
-      ${EP_COMMON_CMAKE_ARGS}
-      -DBUILD_TESTING=OFF
+      ${AZURESDK_COMMON_CMAKE_ARGS}
       -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT}
-      -DCMAKE_INSTALL_LIBDIR=lib
-      "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
-      -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX})
+      -DBUILD_DEPS=OFF
+      -DBUILD_ONLY=core\\$<SEMICOLON>identity\\$<SEMICOLON>storage-blobs\\$<SEMICOLON>storage-common\\$<SEMICOLON>storage-files-datalake
+      -DMINIMIZE_SIZE=ON)
 
   # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
   if(UNIX)
     # on Linux and macOS curl seems to be required
     find_curl()
     get_filename_component(CURL_ROOT_HINT "${CURL_INCLUDE_DIRS}" DIRECTORY)
-    # get_filename_component(ZLIB_ROOT_HINT "${ZLIB_INCLUDE_DIRS}" DIRECTORY)
+    get_filename_component(ZLIB_ROOT_HINT "${ZLIB_INCLUDE_DIRS}" DIRECTORY)
 
     # provide hint for AWS SDK to link with the already located libcurl and zlib
     list(APPEND
           AZURESDK_CMAKE_ARGS
           -DCURL_LIBRARY=${CURL_ROOT_HINT}/lib
           -DCURL_INCLUDE_DIR=${CURL_ROOT_HINT}/include
-        #  -DZLIB_LIBRARY=${ZLIB_ROOT_HINT}/lib
-        #  -DZLIB_INCLUDE_DIR=${ZLIB_ROOT_HINT}/include
+         -DZLIB_LIBRARY=${ZLIB_ROOT_HINT}/lib
+         -DZLIB_INCLUDE_DIR=${ZLIB_ROOT_HINT}/include
     )
   endif()
 
@@ -4662,7 +4682,7 @@ macro(build_azuresdk)
                       ${EP_LOG_OPTIONS}
                       URL ${AZURE_CORE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_CMAKE_ARGS}
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
                       BUILD_BYPRODUCTS ${AZURE_CORE_STATIC_LIBRARY})
   add_dependencies(Azure::azure-core azure_core_ep)
 
@@ -4670,15 +4690,16 @@ macro(build_azuresdk)
                       ${EP_LOG_OPTIONS}
                       URL ${AZURE_IDENTITY_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY})
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
   add_dependencies(Azure::azure-identity azure_identity_ep)
 
   externalproject_add(azure_storage_blobs_ep
                       ${EP_LOG_OPTIONS}
                       URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_CMAKE_ARGS}
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
                       BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY})
   add_dependencies(Azure::azure-storage-blobs azure_storage_blobs_ep)
 
@@ -4686,7 +4707,7 @@ macro(build_azuresdk)
                       ${EP_LOG_OPTIONS}
                       URL ${AZURE_STORAGE_COMMON_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_COMMON_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_CMAKE_ARGS}
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
                       BUILD_BYPRODUCTS ${AZURE_STORAGE_COMMON_STATIC_LIBRARY})
   add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
 
@@ -4694,7 +4715,7 @@ macro(build_azuresdk)
                       ${EP_LOG_OPTIONS}
                       URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_CMAKE_ARGS}
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
                       BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY})
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
@@ -4723,6 +4744,14 @@ macro(build_azuresdk)
                           "wininet.lib"
                           "userenv.lib"
                           "version.lib")
+    set_property(TARGET Azure::azure-identity
+                  APPEND
+                  PROPERTY INTERFACE_LINK_LIBRARIES
+                          "winhttp.lib"
+                          "bcrypt.lib"
+                          "wininet.lib"
+                          "userenv.lib"
+                          "version.lib")
   endif()
 endmacro()
 
@@ -4733,6 +4762,15 @@ if(ARROW_AZURE)
   find_package(LibXml2 REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
   message(STATUS "Found Azure SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
+  if(APPLE)
+    # CoreFoundation's path is hardcoded in the CMake files provided by
+    # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
+    # XCode a hard dependency. Command Line Tools is often used instead
+    # of the full XCode suite, so let the linker to find it.
+    set_target_properties(Azure::azure-identity
+                          PROPERTIES INTERFACE_LINK_LIBRARIES
+                                     "-pthread;pthread;-framework CoreFoundation")
+  endif()
 endif()
 
 # ----------------------------------------------------------------------
