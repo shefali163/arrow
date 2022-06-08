@@ -4750,8 +4750,8 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
-  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core 
-        Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
+  # list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core 
+  #       Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
 
@@ -4819,15 +4819,15 @@ if(ARROW_AZURE)
   find_package(LibXml2 REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
   message(STATUS "Found Azure SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
-  if(APPLE)
-    # CoreFoundation's path is hardcoded in the CMake files provided by
-    # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
-    # XCode a hard dependency. Command Line Tools is often used instead
-    # of the full XCode suite, so let the linker to find it.
-    set_target_properties(Azure::azure-identity
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                     "-pthread;pthread;-framework CoreFoundation")
-  endif()
+  # if(APPLE)
+  #   # CoreFoundation's path is hardcoded in the CMake files provided by
+  #   # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
+  #   # XCode a hard dependency. Command Line Tools is often used instead
+  #   # of the full XCode suite, so let the linker to find it.
+  #   set_target_properties(Azure::azure-identity
+  #                         PROPERTIES INTERFACE_LINK_LIBRARIES
+  #                                    "-pthread;pthread;-framework CoreFoundation")
+  # endif()
 endif()
 
 # ----------------------------------------------------------------------
