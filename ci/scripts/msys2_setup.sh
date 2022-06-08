@@ -24,7 +24,7 @@ target=$1
 packages=()
 case "${target}" in
   cpp|c_glib|ruby)
-    packages+=(${MINGW_PACKAGE_PREFIX}-aws-sdk-cpp)
+    # packages+=(${MINGW_PACKAGE_PREFIX}-aws-sdk-cpp)
     packages+=(${MINGW_PACKAGE_PREFIX}-boost)
     packages+=(${MINGW_PACKAGE_PREFIX}-brotli)
     packages+=(${MINGW_PACKAGE_PREFIX}-ccache)
