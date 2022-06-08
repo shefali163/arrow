@@ -1450,7 +1450,7 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
     if (file_exists) {
       // "File" object found
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetProperties(impl_->dfs_endpoint_url + path.full_path, &properties);
+      RETURN_NOT_OK(impl_->GetProperties(impl_->dfs_endpoint_url + path.full_path, &properties));
       FileObjectToInfo(properties, &info);
       return info;
     }
@@ -1477,7 +1477,7 @@ Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& sele
       FileInfo info;
       // std::string url = impl_->gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      impl_->GetProperties(impl_->dfs_endpoint_url + container, &properties);
+      RETURN_NOT_OK(impl_->GetProperties(impl_->dfs_endpoint_url + container, &properties));
       PathInfoToFileInfo(container, FileType::Directory, -1, properties.LastModified,
                          &info);
       results.push_back(std::move(info));
