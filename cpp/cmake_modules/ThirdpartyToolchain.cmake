@@ -4700,7 +4700,8 @@ macro(build_azuresdk)
                       URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY})
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
   add_dependencies(Azure::azure-storage-blobs azure_storage_blobs_ep)
 
   externalproject_add(azure_storage_common_ep
@@ -4708,7 +4709,8 @@ macro(build_azuresdk)
                       URL ${AZURE_STORAGE_COMMON_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_COMMON_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_STORAGE_COMMON_STATIC_LIBRARY})
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_COMMON_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
   add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
 
   externalproject_add(azure_storage_files_datalake_ep
@@ -4716,7 +4718,8 @@ macro(build_azuresdk)
                       URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY})
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
@@ -4745,6 +4748,29 @@ macro(build_azuresdk)
                           "userenv.lib"
                           "version.lib")
     set_property(TARGET Azure::azure-identity
+                  APPEND
+                  PROPERTY INTERFACE_LINK_LIBRARIES
+                          "winhttp.lib"
+                          "bcrypt.lib"
+                          "wininet.lib"
+                          "userenv.lib"
+                          "version.lib")
+    set_property(TARGET Azure::azure-storage-blobs
+                  PROPERTY INTERFACE_LINK_LIBRARIES
+                          "winhttp.lib"
+                          "bcrypt.lib"
+                          "wininet.lib"
+                          "userenv.lib"
+                          "version.lib")
+    set_property(TARGET Azure::azure-storage-common
+                  APPEND
+                  PROPERTY INTERFACE_LINK_LIBRARIES
+                          "winhttp.lib"
+                          "bcrypt.lib"
+                          "wininet.lib"
+                          "userenv.lib"
+                          "version.lib")
+    set_property(TARGET Azure::azure-storage-files-datalake
                   APPEND
                   PROPERTY INTERFACE_LINK_LIBRARIES
                           "winhttp.lib"
