@@ -4597,20 +4597,17 @@ endif()
 macro(build_azuresdk)
   message(STATUS "Building Azure C++ SDK from source")
 
+  find_curl()
+  find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
+
+  set(AZURESDK_PREFIX_PATH_LIST_SEP_CHAR "|")
+  # JOIN is CMake >=3.12 only
+  string(REPLACE ";" ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+        AZURESDK_PREFIX_PATH "${AZURESDK_PREFIX_PATH_LIST}")
+
   set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
   set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
   set(AZURESDK_LIB_DIR "lib")
-
-  if(WIN32)
-    # On Windows, need to match build types
-    set(AZURESDK_BUILD_TYPE ${CMAKE_BUILD_TYPE})
-  else()
-    # Otherwise, always build in release mode.
-    # Especially with gcc, debug builds can fail with "asm constraint" errors:
-    # https://github.com/TileDB-Inc/TileDB/issues/1351
-    set(AZURESDK_BUILD_TYPE release)
-  endif()
-
   
   # provide hint for AWS SDK to link with the already located openssl
   get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
@@ -4618,48 +4615,23 @@ macro(build_azuresdk)
   set(AZURESDK_COMMON_CMAKE_ARGS
       ${EP_COMMON_CMAKE_ARGS}
       -DBUILD_SHARED_LIBS=OFF
-      -DCMAKE_BUILD_TYPE=${AZURESDK_BUILD_TYPE}
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
       -DCMAKE_INSTALL_LIBDIR=${AZURESDK_LIB_DIR}
       -DENABLE_TESTING=OFF
-      -DENABLE_UNITY_BUILD=ON
-      "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
-      "-DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX}"
+      "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+      -DCMAKE_INSTALL_RPATH=$ORIGIN
+      -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX_PATH}
       -DWARNINGS_AS_ERRORS=OFF
-      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT}
-      -DBUILD_DEPS=OFF
-      -DMINIMIZE_SIZE=ON)
+      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT})
 
-  set(AZURESDK_CMAKE_ARGS
-      ${AZURESDK_COMMON_CMAKE_ARGS}
-      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT}
-      -DBUILD_DEPS=OFF
-      -DBUILD_ONLY=core\\$<SEMICOLON>identity\\$<SEMICOLON>storage-blobs\\$<SEMICOLON>storage-common\\$<SEMICOLON>storage-files-datalake
-      -DMINIMIZE_SIZE=ON)
-
-  # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
-  if(UNIX)
-    # on Linux and macOS curl seems to be required
-    find_curl()
-    get_filename_component(CURL_ROOT_HINT "${CURL_INCLUDE_DIRS}" DIRECTORY)
-    get_filename_component(ZLIB_ROOT_HINT "${ZLIB_INCLUDE_DIRS}" DIRECTORY)
-
-    # provide hint for AWS SDK to link with the already located libcurl and zlib
-    list(APPEND
-          AZURESDK_CMAKE_ARGS
-          -DCURL_LIBRARY=${CURL_ROOT_HINT}/lib
-          -DCURL_INCLUDE_DIR=${CURL_ROOT_HINT}/include
-         -DZLIB_LIBRARY=${ZLIB_ROOT_HINT}/lib
-         -DZLIB_INCLUDE_DIR=${ZLIB_ROOT_HINT}/include
-    )
-  endif()
-
-  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
 
   set(AZURE_CORE_STATIC_LIBRARY
       "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_core${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_core_ep
                       ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_CORE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
@@ -4678,6 +4650,8 @@ macro(build_azuresdk)
   )
   externalproject_add(azure_identity_ep
                       ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_IDENTITY_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
@@ -4697,6 +4671,8 @@ macro(build_azuresdk)
   )
   externalproject_add(azure_storage_blobs_ep
                       ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
@@ -4716,6 +4692,8 @@ macro(build_azuresdk)
   )
   externalproject_add(azure_storage_common_ep
                       ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_STORAGE_COMMON_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_COMMON_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
@@ -4735,6 +4713,8 @@ macro(build_azuresdk)
   )
   externalproject_add(azure_storage_files_datalake_ep
                       ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
@@ -4749,67 +4729,12 @@ macro(build_azuresdk)
   target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
+  set(AZURESDK_LIBRARIES)
   list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
-  # list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core 
-  #       Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
+  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
 
+  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
-
-  if(UNIX)
-    # on Linux and macOS curl seems to be required
-    set_property(TARGET Azure::azure-core
-                 APPEND
-                 PROPERTY INTERFACE_LINK_LIBRARIES CURL::libcurl)
-    set_property(TARGET CURL::libcurl
-                 APPEND
-                 PROPERTY INTERFACE_LINK_LIBRARIES OpenSSL::SSL)
-    if(TARGET zlib_ep)
-      set_property(TARGET Azure::azure-core
-                   APPEND
-                   PROPERTY INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
-      add_dependencies(azure_core_ep zlib_ep)
-    endif()
-  elseif(WIN32)
-    set_property(TARGET Azure::azure-core
-                 APPEND
-                 PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-    set_property(TARGET Azure::azure-identity
-                  APPEND
-                  PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-    set_property(TARGET Azure::azure-storage-blobs
-                  PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-    set_property(TARGET Azure::azure-storage-common
-                  APPEND
-                  PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-    set_property(TARGET Azure::azure-storage-files-datalake
-                  APPEND
-                  PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-  endif()
 endmacro()
 
 macro(build_azuresdk1)
@@ -4923,9 +4848,9 @@ macro(build_azuresdk1)
 endmacro()
 
 if(ARROW_AZURE)
-  find_curl()
+  # find_curl()
   find_package(LibXml2 REQUIRED)
-  build_azuresdk1()
+  build_azuresdk()
   # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
   message(STATUS "Found Azure SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
