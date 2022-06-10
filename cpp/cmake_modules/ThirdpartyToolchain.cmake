@@ -4626,7 +4626,7 @@ macro(build_azuresdk)
 
 
   set(AZURE_CORE_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_core${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_core_ep
                       ${EP_LOG_OPTIONS}
@@ -4646,7 +4646,7 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-core azure_core_ep)
 
   set(AZURE_IDENTITY_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_identity_ep
                       ${EP_LOG_OPTIONS}
@@ -4667,7 +4667,7 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-identity azure_identity_ep)
 
   set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_storage_blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_storage_blobs_ep
                       ${EP_LOG_OPTIONS}
@@ -4688,7 +4688,7 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-storage-blobs azure_storage_blobs_ep)
 
   set(AZURE_STORAGE_COMMON_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_storage_common${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-common${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_storage_common_ep
                       ${EP_LOG_OPTIONS}
@@ -4709,7 +4709,7 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
 
   set(AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azuresdk_storage_files_datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-files-datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
   externalproject_add(azure_storage_files_datalake_ep
                       ${EP_LOG_OPTIONS}
