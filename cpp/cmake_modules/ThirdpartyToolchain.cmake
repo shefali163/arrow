@@ -4625,6 +4625,8 @@ macro(build_azuresdk)
       -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT})
 
 
+  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
+
   set(AZURE_CORE_STATIC_LIBRARY
       "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
   )
@@ -4733,7 +4735,6 @@ macro(build_azuresdk)
   list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
   list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
 
-  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
 endmacro()
 
