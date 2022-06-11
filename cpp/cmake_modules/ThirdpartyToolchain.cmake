@@ -4862,7 +4862,7 @@ if(ARROW_AZURE)
     # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
     # XCode a hard dependency. Command Line Tools is often used instead
     # of the full XCode suite, so let the linker to find it.
-    set_target_properties(Azure::azure-storage-blobs
+    set_target_properties(Azure::azure-core
                           PROPERTIES INTERFACE_LINK_LIBRARIES
                                      "-pthread;pthread;-framework CoreFoundation")
   endif()
