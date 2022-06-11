@@ -4647,26 +4647,26 @@ macro(build_azuresdk)
   target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
   add_dependencies(Azure::azure-core azure_core_ep)
 
-  # set(AZURE_IDENTITY_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_identity_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_IDENTITY_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY}
-  #                     DEPENDS azure_core_ep)
-  # add_library(Azure::azure-identity STATIC IMPORTED)
-  # set_target_properties(Azure::azure-identity
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_IDENTITY_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-identity INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-identity azure_identity_ep)
+  set(AZURE_IDENTITY_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_identity_ep
+                      ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_IDENTITY_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
+  add_library(Azure::azure-identity STATIC IMPORTED)
+  set_target_properties(Azure::azure-identity
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_IDENTITY_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-identity INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-identity azure_identity_ep)
 
   # set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
   #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
@@ -4865,6 +4865,9 @@ if(ARROW_AZURE)
     set_target_properties(Azure::azure-core
                           PROPERTIES INTERFACE_LINK_LIBRARIES
                                      "-pthread;pthread;-framework CoreFoundation")
+    set_target_properties(Azure::azure-identity
+                          PROPERTIES INTERFACE_LINK_LIBRARIES
+                                      "-pthread;pthread;-framework CoreFoundation")
   endif()
 endif()
 
