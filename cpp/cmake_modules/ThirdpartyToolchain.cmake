@@ -4851,27 +4851,27 @@ if(ARROW_AZURE)
   # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
   message(STATUS "Found Azure SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
-  if(APPLE)
+  # if(APPLE)
     # CoreFoundation's path is hardcoded in the CMake files provided by
     # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
     # XCode a hard dependency. Command Line Tools is often used instead
     # of the full XCode suite, so let the linker to find it.
-    set_target_properties(Azure::azure-core
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                     "-pthread;pthread;-framework CoreFoundation")
-    set_target_properties(Azure::azure-identity
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                      "-pthread;pthread;-framework CoreFoundation")
-    set_target_properties(Azure::azure-storage-blobs
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                      "-pthread;pthread;-framework CoreFoundation")
-    set_target_properties(Azure::azure-storage-common
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                      "-pthread;pthread;-framework CoreFoundation")
-    set_target_properties(Azure::azure-storage-files-datalake
-                          PROPERTIES INTERFACE_LINK_LIBRARIES
-                                      "-pthread;pthread;-framework CoreFoundation")
-  endif()
+    # set_target_properties(Azure::azure-core
+    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
+    #                                  "-pthread;pthread;-framework CoreFoundation")
+    # set_target_properties(Azure::azure-identity
+    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
+    #                                   "-pthread;pthread;-framework CoreFoundation")
+    # set_target_properties(Azure::azure-storage-blobs
+    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
+    #                                   "-pthread;pthread;-framework CoreFoundation")
+    # set_target_properties(Azure::azure-storage-common
+    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
+    #                                   "-pthread;pthread;-framework CoreFoundation")
+    # set_target_properties(Azure::azure-storage-files-datalake
+    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
+    #                                   "-pthread;pthread;-framework CoreFoundation")
+  # endif()
 endif()
 
 # ----------------------------------------------------------------------
