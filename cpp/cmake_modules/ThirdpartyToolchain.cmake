@@ -4678,8 +4678,7 @@ macro(build_azuresdk)
                       URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
                       CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY}
-                      DEPENDS azure_core_ep)
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY})
   add_library(Azure::azure-storage-blobs STATIC IMPORTED)
   set_target_properties(Azure::azure-storage-blobs
                         PROPERTIES IMPORTED_LOCATION
