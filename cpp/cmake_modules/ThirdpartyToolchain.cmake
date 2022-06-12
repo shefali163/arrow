@@ -4710,32 +4710,30 @@ macro(build_azuresdk)
   target_link_libraries(Azure::azure-storage-common INTERFACE LibXml2::LibXml2)
   add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
 
-  # set(AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-files-datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_storage_files_datalake_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}
-  #                     DEPENDS azure_core_ep)
-  # add_library(Azure::azure-storage-files-datalake STATIC IMPORTED)
-  # set_target_properties(Azure::azure-storage-files-datalake
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
+  set(AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-files-datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_storage_files_datalake_ep
+                      ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}
+                      DEPENDS azure_core_ep)
+  add_library(Azure::azure-storage-files-datalake STATIC IMPORTED)
+  set_target_properties(Azure::azure-storage-files-datalake
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   set(AZURESDK_LIBRARIES)
-  list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common)
-  #  Azure::azure-storage-files-datalake)
-  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common)
-  #  Azure::azure-storage-files-datalake)
+  list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
+  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core Azure::azure-identity Azure::azure-storage-blobs Azure::azure-storage-common Azure::azure-storage-files-datalake)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
 endmacro()
@@ -4872,6 +4870,9 @@ if(ARROW_AZURE)
                           PROPERTIES INTERFACE_LINK_LIBRARIES
                                       "-pthread;pthread;-framework CoreFoundation")
     set_target_properties(Azure::azure-storage-common
+                          PROPERTIES INTERFACE_LINK_LIBRARIES
+                                      "-pthread;pthread;-framework CoreFoundation")
+    set_target_properties(Azure::azure-storage-files-datalake
                           PROPERTIES INTERFACE_LINK_LIBRARIES
                                       "-pthread;pthread;-framework CoreFoundation")
   endif()
