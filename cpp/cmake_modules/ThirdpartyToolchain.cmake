@@ -4627,25 +4627,25 @@ macro(build_azuresdk)
 
   file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
 
-  # set(AZURE_CORE_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_core_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_CORE_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_CORE_STATIC_LIBRARY})
-  # add_library(Azure::azure-core STATIC IMPORTED)
-  # set_target_properties(Azure::azure-core
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_CORE_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-core azure_core_ep)
+  set(AZURE_CORE_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_core_ep
+                      ${EP_LOG_OPTIONS}
+                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_CORE_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_CORE_STATIC_LIBRARY})
+  add_library(Azure::azure-core STATIC IMPORTED)
+  set_target_properties(Azure::azure-core
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_CORE_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-core azure_core_ep)
 
   set(AZURE_IDENTITY_STATIC_LIBRARY
       "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
@@ -4728,8 +4728,8 @@ macro(build_azuresdk)
   add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   set(AZURESDK_LIBRARIES)
-  list(APPEND AZURESDK_LIBRARIES Azure::azure-storage-files-datalake Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common)
-  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-storage-files-datalake Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common)
+  list(APPEND AZURESDK_LIBRARIES Azure::azure-storage-files-datalake Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
+  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-storage-files-datalake Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
 endmacro()
@@ -4856,9 +4856,9 @@ if(ARROW_AZURE)
     # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
     # XCode a hard dependency. Command Line Tools is often used instead
     # of the full XCode suite, so let the linker to find it.
-    # set_target_properties(Azure::azure-core
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                  "-pthread;pthread;-framework CoreFoundation")
+    set_target_properties(Azure::azure-core
+                          PROPERTIES INTERFACE_LINK_LIBRARIES
+                                     "-pthread;pthread;-framework CoreFoundation")
     set_target_properties(Azure::azure-identity
                           PROPERTIES INTERFACE_LINK_LIBRARIES
                                       "-pthread;pthread;-framework CoreFoundation")
