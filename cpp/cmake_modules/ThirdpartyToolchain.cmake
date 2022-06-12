@@ -4668,9 +4668,9 @@ macro(build_azuresdk)
   # target_link_libraries(Azure::azure-identity INTERFACE LibXml2::LibXml2)
   # add_dependencies(Azure::azure-identity azure_identity_ep)
 
-  # set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
+  set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
   externalproject_add(azure_storage_blobs_ep
                       ${EP_LOG_OPTIONS}
                       LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
