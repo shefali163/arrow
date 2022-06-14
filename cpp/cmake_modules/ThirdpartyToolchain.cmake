@@ -4600,52 +4600,52 @@ macro(build_azuresdk)
   # find_curl()
   # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
 
-  set(AZURESDK_PREFIX_PATH_LIST_SEP_CHAR "|")
-  # JOIN is CMake >=3.12 only
-  string(REPLACE ";" ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-        AZURESDK_PREFIX_PATH "${AZURESDK_PREFIX_PATH_LIST}")
+  # set(AZURESDK_PREFIX_PATH_LIST_SEP_CHAR "|")
+  # # JOIN is CMake >=3.12 only
+  # string(REPLACE ";" ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+  #       AZURESDK_PREFIX_PATH "${AZURESDK_PREFIX_PATH_LIST}")
 
-  set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
-  set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
-  set(AZURESDK_LIB_DIR "lib")
+  # set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
+  # set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
+  # set(AZURESDK_LIB_DIR "lib")
   
   # provide hint for AWS SDK to link with the already located openssl
-  get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
+  # get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
 
-  set(AZURESDK_COMMON_CMAKE_ARGS
-      ${EP_COMMON_CMAKE_ARGS}
-      -DBUILD_SHARED_LIBS=OFF
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DCMAKE_INSTALL_LIBDIR=${AZURESDK_LIB_DIR}
-      -DENABLE_TESTING=OFF
-      "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
-      -DCMAKE_INSTALL_RPATH=$ORIGIN
-      -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX_PATH}
-      -DWARNINGS_AS_ERRORS=OFF
-      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT})
+  # set(AZURESDK_COMMON_CMAKE_ARGS
+  #     ${EP_COMMON_CMAKE_ARGS}
+  #     -DBUILD_SHARED_LIBS=OFF
+  #     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  #     -DCMAKE_INSTALL_LIBDIR=${AZURESDK_LIB_DIR}
+  #     -DENABLE_TESTING=OFF
+  #     "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+  #     -DCMAKE_INSTALL_RPATH=$ORIGIN
+  #     -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX_PATH}
+  #     -DWARNINGS_AS_ERRORS=OFF
+  #     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT})
 
 
-  file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
+  # file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
 
-  set(AZURE_CORE_STATIC_LIBRARY
-      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
-  externalproject_add(azure_core_ep
-                      ${EP_LOG_OPTIONS}
-                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-                      INSTALL_DIR ${AZURESDK_PREFIX}
-                      URL ${AZURE_CORE_SOURCE_URL}
-                      URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
-                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-                      BUILD_BYPRODUCTS ${AZURE_CORE_STATIC_LIBRARY})
-  add_library(Azure::azure-core STATIC IMPORTED)
-  set_target_properties(Azure::azure-core
-                        PROPERTIES IMPORTED_LOCATION
-                                   "${AZURE_CORE_STATIC_LIBRARY}"
-                                   INTERFACE_INCLUDE_DIRECTORIES
-                                   "${AZURESDK_INCLUDE_DIR}")
-  target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
-  add_dependencies(Azure::azure-core azure_core_ep)
+  # set(AZURE_CORE_STATIC_LIBRARY
+  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-core${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  # )
+  # externalproject_add(azure_core_ep
+  #                     ${EP_LOG_OPTIONS}
+  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
+  #                     INSTALL_DIR ${AZURESDK_PREFIX}
+  #                     URL ${AZURE_CORE_SOURCE_URL}
+  #                     URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
+  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+  #                     BUILD_BYPRODUCTS ${AZURE_CORE_STATIC_LIBRARY})
+  # add_library(Azure::azure-core STATIC IMPORTED)
+  # set_target_properties(Azure::azure-core
+  #                       PROPERTIES IMPORTED_LOCATION
+  #                                  "${AZURE_CORE_STATIC_LIBRARY}"
+  #                                  INTERFACE_INCLUDE_DIRECTORIES
+  #                                  "${AZURESDK_INCLUDE_DIR}")
+  # target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
+  # add_dependencies(Azure::azure-core azure_core_ep)
 
   # set(AZURE_IDENTITY_STATIC_LIBRARY
   #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
@@ -4727,13 +4727,13 @@ macro(build_azuresdk)
   # target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
   # add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
-  set(AZURESDK_LIBRARIES)
-  list(APPEND AZURESDK_LIBRARIES Azure::azure-core)
+  # set(AZURESDK_LIBRARIES)
+  # list(APPEND AZURESDK_LIBRARIES Azure::azure-core)
   #  Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
-  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core)
+  # list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core)
   #  Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
 
-  set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
+  # set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
 endmacro()
 
 macro(build_azuresdk1)
