@@ -270,7 +270,7 @@ jobs:
           - 32
           - 64
     env:
-      ARROW_AZURE: OFF
+      ARROW_AZURE: ON
       ARROW_BUILD_SHARED: ON
       ARROW_BUILD_STATIC: OFF
       ARROW_BUILD_TESTS: ON
