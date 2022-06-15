@@ -4597,13 +4597,8 @@ endif()
 macro(build_azuresdk)
   message(STATUS "Building Azure C++ SDK from source")
 
-  # find_curl()
-  # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
-
-  set(AZURESDK_PREFIX_PATH_LIST_SEP_CHAR "|")
-  # JOIN is CMake >=3.12 only
-  string(REPLACE ";" ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-        AZURESDK_PREFIX_PATH "${AZURESDK_PREFIX_PATH_LIST}")
+  find_curl()
+  find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
 
   set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
   set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
@@ -4618,11 +4613,13 @@ macro(build_azuresdk)
       -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
       -DCMAKE_INSTALL_LIBDIR=${AZURESDK_LIB_DIR}
       -DENABLE_TESTING=OFF
-      "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
-      -DCMAKE_INSTALL_RPATH=$ORIGIN
-      -DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX_PATH}
+      -DENABLE_UNITY_BUILD=ON
+      "-DCMAKE_INSTALL_PREFIX=${AZURESDK_PREFIX}"
+      "-DCMAKE_PREFIX_PATH=${AZURESDK_PREFIX}"
       -DWARNINGS_AS_ERRORS=OFF
-      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT})
+      -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_HINT}
+      -DBUILD_DEPS=OFF
+      -DMINIMIZE_SIZE=ON)
 
 
   file(MAKE_DIRECTORY ${AZURESDK_INCLUDE_DIR})
@@ -4632,7 +4629,6 @@ macro(build_azuresdk)
   )
   externalproject_add(azure_core_ep
                       ${EP_LOG_OPTIONS}
-                      LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
                       INSTALL_DIR ${AZURESDK_PREFIX}
                       URL ${AZURE_CORE_SOURCE_URL}
                       URL_HASH "SHA256=${ARROW_AZURE_CORE_BUILD_SHA256_CHECKSUM}"
@@ -4647,257 +4643,94 @@ macro(build_azuresdk)
   target_link_libraries(Azure::azure-core INTERFACE LibXml2::LibXml2)
   add_dependencies(Azure::azure-core azure_core_ep)
 
-  # set(AZURE_IDENTITY_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_identity_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_IDENTITY_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY})
-  # add_library(Azure::azure-identity STATIC IMPORTED)
-  # set_target_properties(Azure::azure-identity
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_IDENTITY_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-identity INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-identity azure_identity_ep)
+  set(AZURE_IDENTITY_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-identity${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_identity_ep
+                      ${EP_LOG_OPTIONS}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_IDENTITY_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_IDENTITY_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_IDENTITY_STATIC_LIBRARY})
+  add_library(Azure::azure-identity STATIC IMPORTED)
+  set_target_properties(Azure::azure-identity
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_IDENTITY_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-identity INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-identity azure_identity_ep)
 
-  # set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_storage_blobs_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY})
-  # add_library(Azure::azure-storage-blobs STATIC IMPORTED)
-  # set_target_properties(Azure::azure-storage-blobs
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_STORAGE_BLOBS_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-storage-blobs INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-storage-blobs azure_storage_blobs_ep)
+  set(AZURE_STORAGE_BLOBS_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-blobs${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_storage_blobs_ep
+                      ${EP_LOG_OPTIONS}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_STORAGE_BLOB_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_STORAGE_BLOB_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_BLOBS_STATIC_LIBRARY})
+  add_library(Azure::azure-storage-blobs STATIC IMPORTED)
+  set_target_properties(Azure::azure-storage-blobs
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_STORAGE_BLOBS_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-storage-blobs INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-storage-blobs azure_storage_blobs_ep)
 
-  # set(AZURE_STORAGE_COMMON_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-common${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_storage_common_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_STORAGE_COMMON_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_STORAGE_COMMON_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_STORAGE_COMMON_STATIC_LIBRARY})
-  # add_library(Azure::azure-storage-common STATIC IMPORTED)
-  # set_target_properties(Azure::azure-storage-common
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_STORAGE_COMMON_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-storage-common INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
+  set(AZURE_STORAGE_COMMON_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-common${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_storage_common_ep
+                      ${EP_LOG_OPTIONS}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_STORAGE_COMMON_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_STORAGE_COMMON_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_COMMON_STATIC_LIBRARY})
+  add_library(Azure::azure-storage-common STATIC IMPORTED)
+  set_target_properties(Azure::azure-storage-common
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_STORAGE_COMMON_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-storage-common INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-storage-common azure_storage_common_ep)
 
-  # set(AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY
-  #     "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-files-datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  # )
-  # externalproject_add(azure_storage_files_datalake_ep
-  #                     ${EP_LOG_OPTIONS}
-  #                     LIST_SEPARATOR ${AZURESDK_PREFIX_PATH_LIST_SEP_CHAR}
-  #                     INSTALL_DIR ${AZURESDK_PREFIX}
-  #                     URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
-  #                     URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
-  #                     CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
-  #                     BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY})
-  # add_library(Azure::azure-storage-files-datalake STATIC IMPORTED)
-  # set_target_properties(Azure::azure-storage-files-datalake
-  #                       PROPERTIES IMPORTED_LOCATION
-  #                                  "${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}"
-  #                                  INTERFACE_INCLUDE_DIRECTORIES
-  #                                  "${AZURESDK_INCLUDE_DIR}")
-  # target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
-  # add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
+  set(AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY
+      "${AZURESDK_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}azure-storage-files-datalake${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  externalproject_add(azure_storage_files_datalake_ep
+                      ${EP_LOG_OPTIONS}
+                      INSTALL_DIR ${AZURESDK_PREFIX}
+                      URL ${AZURE_STORAGE_FILES_DATALAKE_SOURCE_URL}
+                      URL_HASH "SHA256=${ARROW_AZURE_STORAGE_FILES_DATALAKE_BUILD_SHA256_CHECKSUM}"
+                      CMAKE_ARGS ${AZURESDK_COMMON_CMAKE_ARGS}
+                      BUILD_BYPRODUCTS ${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY})
+  add_library(Azure::azure-storage-files-datalake STATIC IMPORTED)
+  set_target_properties(Azure::azure-storage-files-datalake
+                        PROPERTIES IMPORTED_LOCATION
+                                   "${AZURE_STORAGE_FILES_DATALAKE_STATIC_LIBRARY}"
+                                   INTERFACE_INCLUDE_DIRECTORIES
+                                   "${AZURESDK_INCLUDE_DIR}")
+  target_link_libraries(Azure::azure-storage-files-datalake INTERFACE LibXml2::LibXml2)
+  add_dependencies(Azure::azure-storage-files-datalake azure_storage_files_datalake_ep)
 
   set(AZURESDK_LIBRARIES)
-  list(APPEND AZURESDK_LIBRARIES Azure::azure-core)
-  #  Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
-  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core)
-  #  Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-core)
+  list(APPEND AZURESDK_LIBRARIES Azure::azure-core Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-storage-files-datalake)
+  list(APPEND ARROW_BUNDLED_STATIC_LIBS Azure::azure-core Azure::azure-storage-blobs Azure::azure-identity Azure::azure-storage-common Azure::azure-storage-files-datalake)
 
   set(AZURESDK_LINK_LIBRARIES ${AZURESDK_LIBRARIES})
-  set_property(TARGET Azure::azure-core
-                 APPEND
-                 PROPERTY INTERFACE_LINK_LIBRARIES
-                          "winhttp.lib"
-                          "bcrypt.lib"
-                          "wininet.lib"
-                          "userenv.lib"
-                          "version.lib")
-endmacro()
-
-macro(build_azuresdk1)
-  get_filename_component(OPENSSL_ROOT_HINT "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
-
-  set(AZURESDK_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/azuresdk_ep-install")
-  set(AZURESDK_INCLUDE_DIR "${AZURESDK_PREFIX}/include")
-  set(AZURESDK_LIB_DIR "lib")
-
-  SET(AZURE_CMAKE_BUILD_OPTIONS
-    -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
-    -DAZ_ALL_LIBRARIES=OFF
-    -DWARNINGS_AS_ERRORS=OFF
-    -DBUILD_TESTING=OFF
-    -DBUILD_CODE_COVERAGE=OFF
-    -DBUILD_DOCUMENTATION=OFF
-    -DRUN_LONG_UNIT_TESTS=OFF
-    -DBUILD_PERFORMANCE_TESTS=OFF
-    -DBUILD_STORAGE_SAMPLES=ON
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
-
-  ExternalProject_Add(azure
-    PREFIX azure
-    GIT_REPOSITORY https://github.com/Azure/azure-sdk-for-cpp.git
-    GIT_TAG main
-    UPDATE_COMMAND ""
-    INSTALL_COMMAND ""
-    CMAKE_ARGS ${AZURE_CMAKE_BUILD_OPTIONS}
-    LOG_DOWNLOAD ON
-    LOG_CONFIGURE ON
-    LOG_BUILD ON)
-
-  # set up properties for AZURE sdk library
-  ExternalProject_Get_Property(azure SOURCE_DIR)
-  ExternalProject_Get_Property(azure BINARY_DIR)
-
-  set(CORE_PATH sdk/core/azure-core)
-  set(COMMON_PATH sdk/storage/azure-storage-common)
-  set(BLOBS_PATH sdk/storage/azure-storage-blobs)
-  set(DATALAKE_PATH sdk/storage/azure-storage-files-datalake)
-  set(IDENTITY_PATH sdk/identity/azure-identity)
-
-  # add azure core lib (include and lib)
-  set(AZURE_CORE_INCLUDE_DIR ${SOURCE_DIR}/${CORE_PATH}/inc)
-  file(MAKE_DIRECTORY ${AZURE_CORE_INCLUDE_DIR})
-  set(AZURE_CORE_LIBRARY_PATH ${BINARY_DIR}/${CORE_PATH}/libazure-core.a)
-  set(AZURE_CORE_LIBRARY azure_core)
-  add_library(${AZURE_CORE_LIBRARY} UNKNOWN IMPORTED)
-  set_target_properties(${AZURE_CORE_LIBRARY} PROPERTIES
-      "IMPORTED_LOCATION" "${AZURE_CORE_LIBRARY_PATH}"
-      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-      "INTERFACE_INCLUDE_DIRECTORIES"  "${AZURE_CORE_INCLUDE_DIR}")
-
-  # add azure identity lib (include and lib)
-  set(AZURE_IDENTITY_INCLUDE_DIR ${SOURCE_DIR}/${IDENTITY_PATH}/inc)
-  file(MAKE_DIRECTORY ${AZURE_IDENTITY_INCLUDE_DIR})
-  set(AZURE_IDENTITY_LIBRARY_PATH ${BINARY_DIR}/${IDENTITY_PATH}/libazure-identity.a)
-  set(AZURE_IDENTITY_LIBRARY azure_identity)
-  add_library(${AZURE_IDENTITY_LIBRARY} UNKNOWN IMPORTED)
-  set_target_properties(${AZURE_IDENTITY_LIBRARY} PROPERTIES
-      "IMPORTED_LOCATION" "${AZURE_IDENTITY_LIBRARY_PATH}"
-      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-      "INTERFACE_INCLUDE_DIRECTORIES"  "${AZURE_IDENTITY_INCLUDE_DIR}")
-
-  # add azure storage common lib (include and lib)
-  set(AZURE_COMMON_INCLUDE_DIR ${SOURCE_DIR}/${COMMON_PATH}/inc)
-  file(MAKE_DIRECTORY ${AZURE_COMMON_INCLUDE_DIR})
-  set(AZURE_COMMON_LIBRARY_PATH ${BINARY_DIR}/${COMMON_PATH}/libazure-storage-common.a)
-  set(AZURE_COMMON_LIBRARY azure_common)
-  add_library(${AZURE_COMMON_LIBRARY} UNKNOWN IMPORTED)
-  set_target_properties(${AZURE_COMMON_LIBRARY} PROPERTIES
-      "IMPORTED_LOCATION" "${AZURE_COMMON_LIBRARY_PATH}"
-      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-      "INTERFACE_INCLUDE_DIRECTORIES"  "${AZURE_COMMON_INCLUDE_DIR}")
-
-  # add azure storage blobs lib (include and lib)
-  set(AZURE_BLOBS_INCLUDE_DIR ${SOURCE_DIR}/${BLOBS_PATH}/inc)
-  file(MAKE_DIRECTORY ${AZURE_BLOBS_INCLUDE_DIR})
-  set(AZURE_BLOBS_LIBRARY_PATH ${BINARY_DIR}/${BLOBS_PATH}/libazure-storage-blobs.a)
-  set(AZURE_BLOBS_LIBRARY azure_blobs)
-  add_library(${AZURE_BLOBS_LIBRARY} UNKNOWN IMPORTED)
-  set_target_properties(${AZURE_BLOBS_LIBRARY} PROPERTIES
-      "IMPORTED_LOCATION" "${AZURE_BLOBS_LIBRARY_PATH}"
-      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-      "INTERFACE_INCLUDE_DIRECTORIES"  "${AZURE_BLOBS_INCLUDE_DIR}")
-
-  # add azure data lake lib (include and lib)
-  set(AZURE_DATALAKE_INCLUDE_DIR ${SOURCE_DIR}/${DATALAKE_PATH}/inc)
-  file(MAKE_DIRECTORY ${AZURE_DATALAKE_INCLUDE_DIR})
-  set(AZURE_DATALAKE_LIBRARY_PATH ${BINARY_DIR}/${DATALAKE_PATH}/libazure-storage-files-datalake.a)
-  set(AZURE_DATALAKE_LIBRARY azure_datalake)
-  add_library(${AZURE_DATALAKE_LIBRARY} UNKNOWN IMPORTED)
-  set_target_properties(${AZURE_DATALAKE_LIBRARY} PROPERTIES
-      "IMPORTED_LOCATION" "${AZURE_DATALAKE_LIBRARY_PATH}"
-      "IMPORTED_LINK_INTERFACE_LIBRARIES" "${CMAKE_THREAD_LIBS_INIT}"
-      "INTERFACE_INCLUDE_DIRECTORIES"  "${AZURE_DATALAKE_INCLUDE_DIR}")
-    
-  add_dependencies(${AZURE_DATALAKE_LIBRARY} azure)
-
-  # add a bundle
-  set(AZURE_LIBRARY azurelib)
-  add_library(${AZURE_LIBRARY} INTERFACE IMPORTED)
-  target_link_libraries(${AZURE_LIBRARY} 
-    INTERFACE ${AZURE_DATALAKE_LIBRARY}
-    INTERFACE ${AZURE_BLOBS_LIBRARY}
-    INTERFACE ${AZURE_COMMON_LIBRARY}
-    INTERFACE ${AZURE_CORE_LIBRARY}
-    INTERFACE ${AZURE_IDENTITY_LIBRARY})
-  
-  set(${AZURESDK_LINK_LIBRARIES} ${AZURE_DATALAKE_LIBRARY} ${AZURE_BLOBS_LIBRARY} ${AZURE_COMMON_LIBRARY} ${AZURE_CORE_LIBRARY} ${AZURE_IDENTITY_LIBRARY})
 endmacro()
 
 if(ARROW_AZURE)
-  # find_curl()
-  if(DEFINED ENV{CONDA_PREFIX})
-    if(DEFINED BUILD_SHARED_LIBS)
-      set(BUILD_SHARED_LIBS_WAS_SET TRUE)
-      set(BUILD_SHARED_LIBS_VALUE ${BUILD_SHARED_LIBS})
-    else()
-      set(BUILD_SHARED_LIBS_WAS_SET FALSE)
-    endif()
-    set(BUILD_SHARED_LIBS "ON")
-  endif()
   find_package(LibXml2 REQUIRED)
   build_azuresdk()
-  if(DEFINED ENV{CONDA_PREFIX})
-    if(BUILD_SHARED_LIBS_WAS_SET)
-      set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_VALUE})
-    else()
-      unset(BUILD_SHARED_LIBS)
-    endif()
-  endif()
-  # find_package(OpenSSL ${ARROW_OPENSSL_REQUIRED_VERSION} REQUIRED)
   message(STATUS "Found Azure SDK headers: ${AZURESDK_INCLUDE_DIR}")
   message(STATUS "Found Azure SDK libraries: ${AZURESDK_LINK_LIBRARIES}")
-  # if(APPLE)
-    # CoreFoundation's path is hardcoded in the CMake files provided by
-    # aws-sdk-cpp to use the MacOSX SDK provided by XCode which makes
-    # XCode a hard dependency. Command Line Tools is often used instead
-    # of the full XCode suite, so let the linker to find it.
-    # set_target_properties(Azure::azure-core
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                  "-pthread;pthread;-framework CoreFoundation")
-    # set_target_properties(Azure::azure-identity
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                   "-pthread;pthread;-framework CoreFoundation")
-    # set_target_properties(Azure::azure-storage-blobs
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                   "-pthread;pthread;-framework CoreFoundation")
-    # set_target_properties(Azure::azure-storage-common
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                   "-pthread;pthread;-framework CoreFoundation")
-    # set_target_properties(Azure::azure-storage-files-datalake
-    #                       PROPERTIES INTERFACE_LINK_LIBRARIES
-    #                                   "-pthread;pthread;-framework CoreFoundation")
-  # endif()
 endif()
 
 # ----------------------------------------------------------------------
