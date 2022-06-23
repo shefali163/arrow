@@ -3,9 +3,9 @@
 # Error out on first failure
 set -e
 
-sudo apt-get -y install nodejs
+apt-get -y install nodejs
 echo "node version = `node --version`"
-sudo npm install -g azurite
+npm install -g azurite
 AZURITE_DIR=${1}/azurite
 mkdir $AZURITE_DIR
 which azurite
