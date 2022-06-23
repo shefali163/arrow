@@ -54,7 +54,7 @@
 #include "arrow/util/optional.h"
 #include "arrow/util/task_group.h"
 #include "arrow/util/thread_pool.h"
-
+#include <iostream>
 namespace arrow {
 
 using internal::Uri;
@@ -253,7 +253,7 @@ struct AzurePath {
 
     // Expected input here => s = /synapsemlfs/testdir/testfile.txt
     auto src = internal::RemoveTrailingSlash(s);
-    if (src.starts_with("https:") || src.starts_with("http::")) {
+    if (src.starts_with("https:") || src.starts_with("http:")) {
       RemoveSchemeFromUri(src);
     }
     auto first_sep = src.find_first_of(kSep);
@@ -275,6 +275,9 @@ struct AzurePath {
   static void RemoveSchemeFromUri(nonstd::sv_lite::string_view& s) {
     auto first = s.find(".core.windows.net");
     s = s.substr(first + 18, s.length());
+    if (first == std::string::npos) {
+      s = s.substr(23, s.length());
+    }
   }
 
   static Status Validate(const AzurePath* path) {
@@ -790,8 +793,11 @@ class AzureBlobFileSystem::Impl
     blob_endpoint_url = options_.account_blob_url;
     RETURN_NOT_OK(InitServiceClient(gen1Client_, options_, blob_endpoint_url));
     RETURN_NOT_OK(InitServiceClient(gen2Client_, options_, dfs_endpoint_url));
-    isHierarchicalNamespaceEnabled =
-        gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
+    if (options_.isTestEnabled) {
+      isHierarchicalNamespaceEnabled = false;
+    } else {
+      isHierarchicalNamespaceEnabled = gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
+    }
     return Status::OK();
   }
 
@@ -909,7 +915,11 @@ class AzureBlobFileSystem::Impl
       if (!FileExists(fileClient.GetUrl()).ValueOrDie()) {
         return Status::IOError("Cannot delete File, Invalid File Path");
       }
-      fileClient.DeleteIfExists();
+      try{
+        fileClient.DeleteIfExists();
+      } catch (std::exception const& e) {
+        std::cout<<"exception: "<<e.what()<<"\n";
+      }
       return Status::OK();
     }
     std::string file_name = path.back();
@@ -1251,7 +1261,7 @@ class AzureBlobFileSystem::Impl
             " hierarchical namespace not enabled");
       }
     }
-    if (!(FileExists(dfs_endpoint_url + path.full_path)).ValueOrDie()) {
+    if (!(FileExists(dfs_endpoint_url + path.full_path).ValueOrDie())) {
       return Status::IOError("Invalid path provided");
     }
     std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient> pathClient_;
@@ -1550,6 +1560,7 @@ Status AzureBlobFileSystem::CreateDir(const std::string& s, bool recursive) {
     // Ensure container exists
     ARROW_ASSIGN_OR_RAISE(bool container_exists, impl_->ContainerExists(path.container));
     if (!container_exists) {
+      // return Status::IOError("faillllll");
       RETURN_NOT_OK(impl_->CreateContainer(path.container));
     }
     std::vector<std::string> parent_path_to_file;
