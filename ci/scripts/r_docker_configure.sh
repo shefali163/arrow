@@ -104,6 +104,10 @@ if [ "$ARROW_S3" == "ON" ] || [ "$ARROW_R_DEV" == "TRUE" ]; then
   if [ -f "/arrow/ci/scripts/install_gcs_testbench.sh" ] && [ "`which pip`" ]; then
     /arrow/ci/scripts/install_gcs_testbench.sh default
   fi
+
+  if [ -f "/arrow/ci/scripts/install_azurite.sh" ]; then
+    /arrow/ci/scripts/install_azurite.sh /usr/local
+  fi
 fi
 
 # Install rsync for bundling cpp source
