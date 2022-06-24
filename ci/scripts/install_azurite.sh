@@ -17,8 +17,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-set -ex
+set -eux
 
+echo "ARROW_USE_CCACHE=ON" >> $GITHUB_ENV
 # apt-get -y install nodejs
 # echo "node version = `node --version`"
 # npm install -g azurite
