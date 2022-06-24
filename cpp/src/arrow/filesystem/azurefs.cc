@@ -1695,7 +1695,6 @@ Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenOutputStream(
 }
 
 
-
 Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenAppendStream(
     const std::string& path, const std::shared_ptr<const KeyValueMetadata>& metadata) {
   return impl_->OpenAppendStream(path, metadata, this);
