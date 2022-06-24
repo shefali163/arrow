@@ -164,7 +164,7 @@ jobs:
       - name: Install Azurite Storage Emulator
         shell: bash
         run: |
-          ci/scripts/ccache_setup.sh
+          ci/scripts/install_azurite.sh
       - name: Setup ccache
         run: |
           ci/scripts/ccache_setup.sh
