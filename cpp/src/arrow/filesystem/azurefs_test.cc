@@ -173,7 +173,7 @@ TEST_F(TestAzureFileSystem, GetFileInfo) {
   AssertFileInfo(fs_.get(), "", FileType::Directory); 
 
   auto res = fs_->OpenOutputStream("container/base.txt");
-  res->get()->Write("Base data");
+  ASSERT_OK(res->get()->Write("Base data"));
 
   // "Files"
   AssertFileInfo(fs_.get(), "container/base.txt", FileType::File);
@@ -235,7 +235,7 @@ TEST_F(TestAzureFileSystem, Move) {
   ASSERT_RAISES(IOError, fs_->Move("container/emptydir", "nonexistent-container/non-existentdir"));
   ASSERT_RAISES(IOError, fs_->Move("container/emptydir23", "container/base.txt"));
   auto res = fs_->OpenOutputStream("container/somefile");
-  res->get()->Write("Changed the data");
+  ASSERT_OK(res->get()->Write("Changed the data"));
   ASSERT_RAISES(IOError, fs_->Move("container/base.txt", "container/somefile"));
   ASSERT_RAISES(IOError, fs_->Move("container/somefile", "container/base.txt"));
   ASSERT_RAISES(IOError, fs_->Move("container/base.txt", "container/non-existentdir/non-existentsubdir"));
@@ -414,7 +414,7 @@ TEST_F(TestAzureFileSystem, DeleteDirContents) {
   
   // C/F
   auto res = fs_->OpenOutputStream("container/somefile");
-  res->get()->Write("some data");
+  ASSERT_OK(res->get()->Write("some data"));
   ASSERT_RAISES(IOError, fs_->DeleteDirContents("container/somefile"));
   AssertFileInfo(fs_.get(), "container/somefile", FileType::File);
 
