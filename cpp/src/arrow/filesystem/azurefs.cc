@@ -768,8 +768,8 @@ void FileObjectToInfo(
   info->set_type(FileType::File);
   info->set_size(static_cast<int64_t>(properties.FileSize));
   info->set_mtime(ToTimePoint((int)(std::chrono::duration_cast<std::chrono::seconds>(
-                                  properties.LastModified - Azure::DateTime(1970))
-                                  .count())));
+                                        properties.LastModified - Azure::DateTime(1970))
+                                        .count())));
 }
 
 void PathInfoToFileInfo(const std::string path, const FileType type, const int64_t size,
@@ -777,9 +777,9 @@ void PathInfoToFileInfo(const std::string path, const FileType type, const int64
   info->set_type(type);
   info->set_size(size);
   info->set_path(path);
-  info->set_mtime(ToTimePoint((int)(
-      std::chrono::duration_cast<std::chrono::seconds>(dt - Azure::DateTime(1970))
-          .count())));
+  info->set_mtime(ToTimePoint(
+      (int)(std::chrono::duration_cast<std::chrono::seconds>(dt - Azure::DateTime(1970))
+                .count())));
 }
 
 }  // namespace
@@ -808,7 +808,8 @@ class AzureBlobFileSystem::Impl
     if (options_.isTestEnabled) {
       isHierarchicalNamespaceEnabled = false;
     } else {
-      isHierarchicalNamespaceEnabled = gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
+      isHierarchicalNamespaceEnabled =
+          gen1Client_->GetAccountInfo().Value.IsHierarchicalNamespaceEnabled;
     }
     return Status::OK();
   }
@@ -1107,9 +1108,10 @@ class AzureBlobFileSystem::Impl
         for (auto p : paths.Blobs) {
           std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient>
               pathClient_;
-          RETURN_NOT_OK(InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(
-              pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name,
-              container, p.Name));
+          RETURN_NOT_OK(
+              InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(
+                  pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name,
+                  container, p.Name));
           childrenFiles->push_back(container + "/" + p.Name);
         }
       } catch (std::exception const& e) {
@@ -1125,9 +1127,10 @@ class AzureBlobFileSystem::Impl
         for (auto p : paths.Paths) {
           std::shared_ptr<Azure::Storage::Files::DataLake::DataLakePathClient>
               pathClient_;
-          RETURN_NOT_OK(InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(
-              pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name,
-              container, p.Name));
+          RETURN_NOT_OK(
+              InitPathClient<Azure::Storage::Files::DataLake::DataLakePathClient>(
+                  pathClient_, options_, dfs_endpoint_url + container + "/" + p.Name,
+                  container, p.Name));
           if (pathClient_->GetProperties().Value.IsDirectory) {
             childrenDirs->push_back(container + "/" + p.Name);
           } else {
@@ -1472,7 +1475,8 @@ Result<FileInfo> AzureBlobFileSystem::GetFileInfo(const std::string& s) {
     if (file_exists) {
       // "File" object found
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      RETURN_NOT_OK(impl_->GetProperties(impl_->dfs_endpoint_url + path.full_path, &properties));
+      RETURN_NOT_OK(
+          impl_->GetProperties(impl_->dfs_endpoint_url + path.full_path, &properties));
       FileObjectToInfo(properties, &info);
       return info;
     }
@@ -1499,7 +1503,8 @@ Result<FileInfoVector> AzureBlobFileSystem::GetFileInfo(const FileSelector& sele
       FileInfo info;
       // std::string url = impl_->gen2Client_->GetUrl();
       Azure::Storage::Files::DataLake::Models::PathProperties properties;
-      RETURN_NOT_OK(impl_->GetProperties(impl_->dfs_endpoint_url + container, &properties));
+      RETURN_NOT_OK(
+          impl_->GetProperties(impl_->dfs_endpoint_url + container, &properties));
       PathInfoToFileInfo(container, FileType::Directory, -1, properties.LastModified,
                          &info);
       results.push_back(std::move(info));

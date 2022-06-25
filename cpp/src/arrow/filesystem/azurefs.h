@@ -26,16 +26,18 @@
 #include "arrow/util/uri.h"
 
 namespace Azure {
+namespace Core {
+namespace Credentials {
+
+class TokenCredential;
+
+}  // namespace Credentials
+}  // namespace Core
 namespace Storage {
 
 class StorageSharedKeyCredential;
 
 }  // namespace Storage
-namespace Core {
-namespace Credentials {
-class TokenCredential;
-}  // namespace Credentials
-}  // namespace Core
 }  // namespace Azure
 
 namespace arrow {
