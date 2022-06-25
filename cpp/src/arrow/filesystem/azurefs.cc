@@ -286,10 +286,11 @@ struct AzurePath {
   }
 
   // Removes scheme, host and port from the uri
-  static void ExtractBlobPath(util::string_view& s) {
+  static Status ExtractBlobPath(util::string_view& s) {
     Uri uri;
-    uri.Parse(s.to_string());
+    RETURN_NOT_OK(uri.Parse(s.to_string()));
     s = uri.path();
+    return Status::OK();
   }
 
   static Status Validate(const AzurePath* path) {
