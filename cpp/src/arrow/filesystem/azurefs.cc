@@ -254,10 +254,10 @@ struct AzurePath {
     // Expected input here => s = synapsemlfs/testdir/testfile.txt
     auto src = internal::RemoveTrailingSlash(s);
     if ((src.find("127.0.0.1") != std::string::npos)) {
-      FromLocalHostString(src);
+      RETURN_NOT_OK(FromLocalHostString(src));
     }
     if (internal::IsLikelyUri(src)) {
-      ExtractBlobPath(src);
+      RETURN_NOT_OK(ExtractBlobPath(src));
     }
     src = internal::RemoveLeadingSlash(src);
     auto first_sep = src.find_first_of(kSep);
@@ -276,13 +276,14 @@ struct AzurePath {
     return path;
   }
 
-  static void FromLocalHostString(util::string_view& src) {
+  static Status FromLocalHostString(util::string_view& src) {
     auto port = src.find("127.0.0.1");
     src = src.substr(port);
     auto first_sep = src.find_first_of(kSep);
     src = src.substr(first_sep + 1);
     auto sec_sep = src.find_first_of(kSep);
     src = src.substr(sec_sep + 1);
+    return Status::OK();
   }
 
   // Removes scheme, host and port from the uri
