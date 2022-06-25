@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <azure/core/credentials/credentials.hpp>
-#include <azure/storage/common/storage_credential.hpp>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,6 +24,19 @@
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/util/macros.h"
 #include "arrow/util/uri.h"
+
+namespace Azure {
+namespace Storage {
+
+class StorageSharedKeyCredential;
+
+}  // namespace Storage
+namespace Core {
+namespace Credentials {
+class TokenCredential;
+}  // namespace Credentials
+}  // namespace Core
+}  // namespace Azure
 
 namespace arrow {
 namespace fs {

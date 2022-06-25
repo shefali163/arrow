@@ -54,7 +54,7 @@
 #include "arrow/util/optional.h"
 #include "arrow/util/task_group.h"
 #include "arrow/util/thread_pool.h"
-#include <iostream>
+
 namespace arrow {
 
 using internal::Uri;
@@ -251,11 +251,15 @@ struct AzurePath {
     // path_to_file = testdir/testfile.txt
     // path_to_file_parts = [testdir, testfile.txt]
 
-    // Expected input here => s = /synapsemlfs/testdir/testfile.txt
+    // Expected input here => s = synapsemlfs/testdir/testfile.txt
     auto src = internal::RemoveTrailingSlash(s);
-    if (src.starts_with("https:") || src.starts_with("http:")) {
-      RemoveSchemeFromUri(src);
+    if ((src.find("127.0.0.1") != std::string::npos)) {
+      FromLocalHostString(src);
     }
+    if (internal::IsLikelyUri(src)) {
+      ExtractBlobPath(src);
+    }
+    src = internal::RemoveLeadingSlash(src);
     auto first_sep = src.find_first_of(kSep);
     if (first_sep == 0) {
       return Status::Invalid("Path cannot start with a separator ('", s, "')");
@@ -272,12 +276,20 @@ struct AzurePath {
     return path;
   }
 
-  static void RemoveSchemeFromUri(nonstd::sv_lite::string_view& s) {
-    auto first = s.find(".core.windows.net");
-    s = s.substr(first + 18, s.length());
-    if (first == std::string::npos) {
-      s = s.substr(23, s.length());
-    }
+  static void FromLocalHostString(util::string_view& src) {
+    auto port = src.find("127.0.0.1");
+    src = src.substr(port);
+    auto first_sep = src.find_first_of(kSep);
+    src = src.substr(first_sep + 1);
+    auto sec_sep = src.find_first_of(kSep);
+    src = src.substr(sec_sep + 1);
+  }
+
+  // Removes scheme, host and port from the uri
+  static void ExtractBlobPath(util::string_view& s) {
+    Uri uri;
+    uri.Parse(s.to_string());
+    s = uri.path();
   }
 
   static Status Validate(const AzurePath* path) {
@@ -915,10 +927,10 @@ class AzureBlobFileSystem::Impl
       if (!FileExists(fileClient.GetUrl()).ValueOrDie()) {
         return Status::IOError("Cannot delete File, Invalid File Path");
       }
-      try{
+      try {
         fileClient.DeleteIfExists();
       } catch (std::exception const& e) {
-        std::cout<<"exception: "<<e.what()<<"\n";
+        // Azurite throws an exception
       }
       return Status::OK();
     }
@@ -1560,7 +1572,6 @@ Status AzureBlobFileSystem::CreateDir(const std::string& s, bool recursive) {
     // Ensure container exists
     ARROW_ASSIGN_OR_RAISE(bool container_exists, impl_->ContainerExists(path.container));
     if (!container_exists) {
-      // return Status::IOError("faillllll");
       RETURN_NOT_OK(impl_->CreateContainer(path.container));
     }
     std::vector<std::string> parent_path_to_file;
@@ -1693,7 +1704,6 @@ Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenOutputStream(
     const std::string& path, const std::shared_ptr<const KeyValueMetadata>& metadata) {
   return impl_->OpenOutputStream(path, metadata, this);
 }
-
 
 Result<std::shared_ptr<io::OutputStream>> AzureBlobFileSystem::OpenAppendStream(
     const std::string& path, const std::shared_ptr<const KeyValueMetadata>& metadata) {
