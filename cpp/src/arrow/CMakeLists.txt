@@ -554,15 +554,18 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux" AND ${CMAKE_SYSTEM_PROCESSOR} MATCHES "
   string(APPEND ARROW_PC_LIBS_PRIVATE " -latomic")
 endif()
 
-add_arrow_lib(azurefs
-              SOURCES
-              ${AZURE_SRCS}
-              BUILD_SHARED
-              OFF
-              BUILD_STATIC
-              OFF
-              SHARED_LINK_LIBS
-              ${ARROW_AZURE_LINK_LIBS})
+# add_arrow_lib(azurefs
+#               SOURCES
+#               ${AZURE_SRCS}
+#               BUILD_SHARED
+#               ON
+#               BUILD_STATIC
+#               OFF
+#               SHARED_LINK_LIBS
+#               ${ARROW_AZURE_LINK_LIBS})
+
+add_library(azurefs_objlib OBJECT ${AZURE_SRCS})
+target_link_libraries(azurefs_objlib PUBLIC ${ARROW_AZURE_LINK_LIBS})
 
 set_target_properties(azurefs_objlib PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
 list(APPEND ARROW_LINK_LIBS ${ARROW_AZURE_LINK_LIBS} azurefs_objlib)
