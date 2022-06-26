@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.5)
 message(STATUS "Building using CMake version: ${CMAKE_VERSION}")
 
 # Compiler id for Apple Clang is now AppleClang.
@@ -712,7 +712,6 @@ endif()
 # cpp/thirdparty/hadoop/include/. See
 # cpp/cmake_modules/ThirdpartyToolchain.cmake for details.
 set(ARROW_LINK_LIBS arrow::flatbuffers arrow::hadoop)
-set(ARROW_AZURE_LINK_LIBS)
 set(ARROW_STATIC_LINK_LIBS arrow::flatbuffers arrow::hadoop)
 set(ARROW_STATIC_INSTALL_INTERFACE_LIBS)
 
@@ -818,7 +817,8 @@ if(ARROW_WITH_OPENTELEMETRY)
 endif()
 
 if(ARROW_AZURE)
-  list(APPEND ARROW_AZURE_LINK_LIBS ${AZURESDK_LINK_LIBRARIES})
+  list(APPEND ARROW_LINK_LIBS ${AZURESDK_LINK_LIBRARIES})
+  list(APPEND ARROW_STATIC_LINK_LIBS ${AZURESDK_LINK_LIBRARIES})
 endif()
 
 if(ARROW_WITH_UTF8PROC)
