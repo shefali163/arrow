@@ -330,6 +330,11 @@ jobs:
       - name: Setup MSYS2
         shell: msys2 {0}
         run: ci/scripts/msys2_setup.sh cpp
+      - name: Install Azurite Storage Emulator
+        shell: bash
+        run: |
+          chmod +x ci/scripts/install_azurite.sh
+          ci/scripts/install_azurite.sh $(pwd)
       - name: Cache ccache
         uses: actions/cache@v2
         with:

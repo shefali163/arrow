@@ -19,6 +19,7 @@
 
 set -e
 
+echo $OSTYPE
 # apt-get -y install nodejs
 brew install node
 echo "node version = `node --version`"
