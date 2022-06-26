@@ -19,7 +19,8 @@
 
 set -e
 
-apt-get -y install nodejs
+# apt-get -y install nodejs
+brew install node
 echo "node version = `node --version`"
 npm install -g azurite
 AZURITE_DIR=${0}/azurite
