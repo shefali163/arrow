@@ -244,7 +244,6 @@ struct AzurePath {
   std::string path_to_file;
   std::vector<std::string> path_to_file_parts;
 
-
   static Result<AzurePath> FromString(const std::string& s) {
     // https://synapsemladlsgen2.dfs.core.windows.net/synapsemlfs/testdir/testfile.txt
     // container = synapsemlfs
