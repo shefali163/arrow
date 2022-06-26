@@ -29,4 +29,4 @@ AZURITE_DIR=${1}/azurite
 mkdir $AZURITE_DIR
 
 # Start azurite
-azurite --silent --location $AZURITE_DIR --debug $AZURITE_DIR/debug.log
+azurite --silent --location $AZURITE_DIR --debug $AZURITE_DIR/debug.log &
