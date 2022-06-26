@@ -23,10 +23,10 @@ set -e
 brew install node
 echo "node version = `node --version`"
 npm install -g azurite
-# AZURITE_DIR=${0}/azurite
-# mkdir $AZURITE_DIR
 which azurite
 echo "azurite version = `azurite --version`"
+AZURITE_DIR=${1}/azurite
+mkdir $AZURITE_DIR
 
-# # Start azurite
-# azurite --silent --location $AZURITE_DIR --debug $AZURITE_DIR/debug.log
+# Start azurite
+azurite --silent --location $AZURITE_DIR --debug $AZURITE_DIR/debug.log
