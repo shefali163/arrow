@@ -31,7 +31,7 @@ else
   apt-get update
 #   apt-get -y install curl
 #   curl -sL https://deb.nodesource.com/setup_6.x | -E bash -
-  apt-get -y install nodejs
+  apt-get -y install npm
   npm install -g azurite
   which azurite
 fi
