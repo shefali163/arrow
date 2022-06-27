@@ -238,6 +238,7 @@ Result<AzureOptions> AzureOptions::FromUri(const Uri& uri, std::string* out_path
 
 namespace {
 
+
 struct AzurePath {
   std::string full_path;
   std::string container;
