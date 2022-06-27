@@ -29,8 +29,8 @@ elif [[ "$OSTYPE" == "msys" ]]; then
 else
   echo $OSTYPE
   apt-get update
-  apt-get -y install curl
-  curl -sL https://deb.nodesource.com/setup_6.x | -E bash -
+#   apt-get -y install curl
+#   curl -sL https://deb.nodesource.com/setup_6.x | -E bash -
   apt-get -y install nodejs
   npm install -g azurite
   which azurite
