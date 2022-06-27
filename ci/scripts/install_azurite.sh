@@ -27,7 +27,9 @@ elif [[ "$OSTYPE" == "msys" ]]; then
   choco install nodejs.install
   npm install -g azurite
 else
-  curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash -
+  echo $OSTYPE
+  apt install curl
+  curl -sL https://deb.nodesource.com/setup_6.x | -E bash -
   apt-get -y install nodejs
   npm install -g azurite
   which azurite
