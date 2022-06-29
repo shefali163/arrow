@@ -20,7 +20,6 @@
 set -e
 
 if [[ "$OSTYPE" == "darwin20" ]]; then
-  brew install node
   npm install -g azurite
   which azurite
 elif [[ "$OSTYPE" == "msys" ]]; then
@@ -28,10 +27,10 @@ elif [[ "$OSTYPE" == "msys" ]]; then
   npm install -g azurite
 else
   echo $OSTYPE
-  apt-get update
+#   apt-get update
 #   apt-get -y install curl
 #   curl -sL https://deb.nodesource.com/setup_6.x | -E bash -
-  apt-get -y install npm
+#   apt-get -y install npm
   npm install -g azurite
   which azurite
 fi

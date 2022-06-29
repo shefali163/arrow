@@ -42,9 +42,9 @@ namespace internal {
 namespace bp = boost::process;
 using ::arrow::internal::TemporaryDir;
 
-class AzuriteEmulator : public ::testing::Environment {
+class AzuriteEnv : public ::testing::Environment {
  public:
-  AzuriteEmulator() {
+  AzuriteEnv() {
     account_name_ = "devstoreaccount1";
     account_key_ = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
     auto exe_path = bp::search_path("azurite");
@@ -64,7 +64,7 @@ class AzuriteEmulator : public ::testing::Environment {
     }
   }
 
-  ~AzuriteEmulator() override {
+  ~AzuriteEnv() override {
     server_process_.terminate();
     server_process_.wait();
   }
@@ -81,12 +81,17 @@ class AzuriteEmulator : public ::testing::Environment {
   std::unique_ptr<TemporaryDir> temp_dir_;
 };
 
-AzuriteEmulator* TestAzure() {
-  static auto* const environment = [] { return new AzuriteEmulator; }();
-  return environment;
-}
+// AzuriteEmulator* TestAzure() {
+//   static auto* const environment = [] { return new AzuriteEmulator; }();
+//   return environment;
+// }
 
-auto* testazure_env = ::testing::AddGlobalTestEnvironment(TestAzure());
+auto* azurite_env = ::testing::AddGlobalTestEnvironment(new AzuriteEnv);
+
+// auto* testazure_env = ::testing::AddGlobalTestEnvironment(TestAzure());
+AzuriteEnv* GetAzuriteEnv() {
+  return ::arrow::internal::checked_cast<AzuriteEnv*>(azurite_env);
+}
 
 class TestAzureFileSystem : public ::testing::Test {
  public:
@@ -95,10 +100,10 @@ class TestAzureFileSystem : public ::testing::Test {
   AzureOptions options_;
 
   void MakeFileSystem() { 
-    const std::string& account_name = TestAzure()->account_name();
-    const std::string& account_key = TestAzure()->account_key();
-    options_.account_blob_url = "http://127.0.0.1:10000/" + TestAzure()->account_name() + "/";
-    options_.account_dfs_url = "http://127.0.0.1:10000/" + TestAzure()->account_name() + "/";
+    const std::string& account_name = GetAzuriteEnv()->account_name();
+    const std::string& account_key = GetAzuriteEnv()->account_key();
+    options_.account_blob_url = "http://127.0.0.1:10000/" + GetAzuriteEnv()->account_name() + "/";
+    options_.account_dfs_url = "http://127.0.0.1:10000/" + GetAzuriteEnv()->account_name() + "/";
     options_.isTestEnabled = true;
     options_.storage_credentials_provider = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(account_name, account_key);
     options_.credentials_kind = AzureCredentialsKind::StorageCredentials;
@@ -142,6 +147,48 @@ class TestAzureFileSystem : public ::testing::Test {
     buf->get()->Equals(Buffer(const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&expected[0])), expected.size()));
   }
 };
+
+TEST_F(TestAzureFileSystem, FromUri) {
+  AzureOptions options;
+  Uri uri;
+
+  // Public container
+  ASSERT_OK(uri.Parse("https://testcontainer.dfs.core.windows.net/"));
+  ASSERT_OK_AND_ASSIGN(options, AzureOptions::FromUri(uri));
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::Anonymous);
+  ASSERT_EQ(options.account_dfs_url, "https://testcontainer.dfs.core.windows.net/");
+
+  // Sas Token
+  ASSERT_OK(uri.Parse("https://testcontainer.blob.core.windows.net/?dummy_sas_token"));
+  ASSERT_OK_AND_ASSIGN(options, AzureOptions::FromUri(uri));
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::Sas);
+  ASSERT_EQ(options.account_dfs_url, "https://testcontainer.dfs.core.windows.net/");
+  ASSERT_EQ(options.sas_token, "?dummy_sas_token");
+}
+
+TEST_F(TestAzureFileSystem, FromAccountKey) {
+  AzureOptions options = AzureOptions::FromAccountKey(GetAzuriteEnv()->account_name(), GetAzuriteEnv()->account_key());
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::StorageCredentials);
+  ASSERT_NE(options.storage_credentials_provider, nullptr);
+}
+
+TEST_F(TestAzureFileSystem, FromConnectionString) {
+  AzureOptions options = AzureOptions::FromConnectionString("DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;");
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::ConnectionString);
+  ASSERT_NE(options.connection_string, "");
+}
+
+TEST_F(TestAzureFileSystem, FromServicePrincipleCredential) {
+  AzureOptions options = AzureOptions::FromServicePrincipleCredential("dummy_account_name", "dummy_tenant_id", "dummy_client_id", "dummy_client_secret");
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::ServicePrincipleCredentials);
+  ASSERT_NE(options.service_principle_credentials_provider, nullptr);
+}
+
+TEST_F(TestAzureFileSystem, FromSas) {
+  AzureOptions options = AzureOptions::FromSas("https://testcontainer.blob.core.windows.net/?dummy_sas_token");
+  ASSERT_EQ(options.credentials_kind, arrow::fs::AzureCredentialsKind::Sas);
+  ASSERT_NE(options.sas_token, "");
+}
 
 TEST_F(TestAzureFileSystem, CreateDir) {
   // New container
